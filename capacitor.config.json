@@ -1,0 +1,8 @@
+{
+  "appId":"app.inkos.tattoo",
+  "appName":"INK.OS",
+  "webDir":"www",
+  "backgroundColor":"#050506",
+  "android":{"backgroundColor":"#050506","allowMixedContent":false},
+  "plugins":{"SplashScreen":{"launchShowDuration":0,"backgroundColor":"#050506"}}
+}
