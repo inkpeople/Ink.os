@@ -1,0 +1,50 @@
+  setTimeout(()=>input && input.focus(),80);
+  input.oninput=()=>runGlobalSearch(input.value.trim().toLowerCase());
+  runGlobalSearch('');
+}
+function runGlobalSearch(q){
+  const box=$('#globalSearchResults'); if(!box) return;
+  if(!q){ box.innerHTML='<p class="dim small">Начните вводить запрос...</p>'; return; }
+  const sections=[];
+  const clientMatches=S.clients.filter(c=>[c.name,c.phone,c.instagram,c.telegram,c.city].filter(Boolean).some(v=>String(v).toLowerCase().includes(q))).slice(0,6);
+  if(clientMatches.length) sections.push({title:'Клиенты',rows:clientMatches.map(c=>({label:c.name,sub:c.phone||c.city||'',onclick:`closeSheet();openClient('${c.id}')`}))});
+  const eventMatches=S.events.filter(e=>[e.title,clientOrLabel(e),EVENT_TYPES[e.type]?.label].filter(Boolean).some(v=>String(v).toLowerCase().includes(q))).slice(0,6);
+  if(eventMatches.length) sections.push({title:'Записи',rows:eventMatches.map(e=>({label:`${EVENT_TYPES[e.type]?.label||''} · ${clientOrLabel(e)}`,sub:fmtDate(e.date)+' '+(e.start||''),onclick:`closeSheet();go('calendar');openDaySummary('${e.date}')`}))});
+  const projMatches=S.projects.filter(p=>[p.title,p.zone,(S.clients.find(c=>c.id===p.clientId)||{}).name].filter(Boolean).some(v=>String(v).toLowerCase().includes(q))).slice(0,6);
+  if(projMatches.length) sections.push({title:'Проекты',rows:projMatches.map(p=>({label:p.title,sub:(S.clients.find(c=>c.id===p.clientId)||{}).name||'',onclick:`closeSheet();openProject('${p.id}')`}))});
+  const finMatches=S.finance.filter(f=>[f.comment,INCOME_CATEGORIES[f.category],EXPENSE_CATEGORIES[f.category]].filter(Boolean).some(v=>String(v).toLowerCase().includes(q))).slice(0,6);
+  if(finMatches.length) sections.push({title:'Финансы',rows:finMatches.map(f=>({label:(INCOME_CATEGORIES[f.category]||EXPENSE_CATEGORIES[f.category]||f.category||''),sub:fmtDate(f.date)+' · '+fmtMoney(f.amount),onclick:`closeSheet();go('finance')`}))});
+  const invMatches=S.inventory.filter(i=>[i.name,i.config,i.brand].filter(Boolean).some(v=>String(v).toLowerCase().includes(q))).slice(0,6);
+  if(invMatches.length) sections.push({title:'Материалы',rows:invMatches.map(i=>({label:i.name+(i.config?(' '+i.config):''),sub:`Остаток: ${i.qty} ${i.unit||'шт.'}`,onclick:`closeSheet();go('inventory')`}))});
+  if(!sections.length){ box.innerHTML='<p class="dim small">Ничего не найдено.</p>'; return; }
+  box.innerHTML=sections.map(s=>`
+    <div class="small dim" style="margin:10px 0 4px;text-transform:uppercase;letter-spacing:.4px">${s.title}</div>
+    ${s.rows.map(r=>`<div class="card" style="margin-bottom:6px;cursor:pointer" onclick="${r.onclick}"><b class="small">${esc(r.label)}</b><div class="small dim">${esc(r.sub)}</div></div>`).join('')}
+  `).join('');
+}
+$('#searchBtn').onclick=openGlobalSearch;
+
+$('#notifBtn').onclick=()=>{
+  S.notifications.forEach(n=>n.read=true);
+  S.notifications.forEach(n=>idbPut('notifications',n));
+  renderNotifCount();
+  openSheet('Уведомления', S.notifications.length? S.notifications.slice(0,100).map(n=>`<div class="card" style="margin-bottom:8px"><div class="small">${esc(n.text)}</div><div class="muted small" style="margin-top:4px">${fmtDateTime(n.createdAt)}</div></div>`).join('') : '<p class="dim">Уведомлений нет.</p>');
+};
+$('#notifBtn').onclick=()=>{
+  S.notifications.forEach(n=>{ if(!n.read){ n.read=true; idbPut('notifications',n); } }); renderNotifCount();
+  const B=(t,f)=>`<button class="btn btn-sm" onclick="closeSheet();${f}">${t}</button>`;
+  const act=n=>{ const b=[];
+    if(n.kind==='remind'||n.kind==='dayof'){ if(n.eventId) b.push(B('Запись',`openEventView('${n.eventId}')`)); if(n.clientId){ b.push(B('Написать клиенту',`openMessageTemplates('${n.clientId}')`)); b.push(`<button class="btn btn-sm" data-copy="${n.id}">Скопировать напоминание</button>`); } }
+    if(n.kind==='write') b.push(n.clientId?B('Написать',`openMessageTemplates('${n.clientId}')`):B('Список клиентов',"openDashSheet('contact')"));
+    if(n.kind==='care') b.push(B('Инструкция по уходу',`openCareSheet('${n.eventId}')`));
+    if(n.kind==='expense') b.push(B('Добавить расход','openFinanceForm()'));
+    if(n.kind==='stock'||n.kind==='restock') b.push(B('Открыть склад',"go('inventory')"));
+    return b.length?`<div class="btn-row" style="margin-top:8px">${b.join('')}</div>`:''; };
+  const ic={remind:'#60a5fa',dayof:'#3ddc84',stock:'#f1c40f',restock:'#f1c40f',expense:'#ff7f50',write:'#b794ff',care:'#b794ff',tip:'#8e8e99',birthday:'#ff3d47',followup:'#3ddc84'};
+  openSheet('Уведомления',S.notifications.length?S.notifications.slice(0,100).map(n=>`<div class="cl-card" style="margin-bottom:8px;border-left:3px solid ${ic[n.kind]||'#444'}"><div class="small">${esc(n.text)}</div><div class="muted small" style="margin-top:4px">${fmtDateTime(n.createdAt)}</div>${act(n)}</div>`).join(''):'<p class="dim">Уведомлений нет.</p>');
+  $$('[data-copy]').forEach(b=>b.onclick=()=>{ const n=S.notifications.find(x=>x.id===b.dataset.copy), e=S.events.find(x=>x.id===n.eventId), c=S.clients.find(x=>x.id===n.clientId);
+    copyText(`Здравствуйте${c?', '+c.name.split(' ')[0]:''}! Напоминаю, что ${e&&e.date===todayISO()?'сегодня':'завтра'} в ${e&&e.start||''} ждём вас на сеанс. Подтвердите, пожалуйста, что всё в силе 🙏`); });
+};
+</script>
+</body>
+</html>
