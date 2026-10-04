@@ -1,0 +1,800 @@
+async function addEventRef(eventId){
+  const e=S.events.find(x=>x.id===eventId); if(!e) return;
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.multiple=true;
+  inp.onchange=async()=>{ for(const f of inp.files){ const url=await new Promise(r=>{const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(f);});
+    const im=await loadImg(url), k=Math.min(1,1000/Math.max(im.width,im.height)); const cv=document.createElement('canvas'); cv.width=im.width*k; cv.height=im.height*k; cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);
+    (e.referenceImages=e.referenceImages||[]).push(cv.toDataURL('image/jpeg',0.82)); }
+    await idbPut('events',e); closeModal(); openEventView(eventId); };
+  inp.click();
+}
+function viewEventRef(eventId,i){
+  const e=S.events.find(x=>x.id===eventId); const src=e.referenceImages[i];
+  openSheet('Референс',`<img src="${src}" style="width:100%;border-radius:10px;background:#fff"><div class="btn-row" style="margin-top:10px"><button class="btn btn-block btn-danger" id="refDel">Удалить</button></div>`);
+  $('#refDel').onclick=async()=>{ e.referenceImages.splice(i,1); await idbPut('events',e); closeSheet(); closeModal(); openEventView(eventId); };
+}
+function openSketch(eventId,baseIdx){
+  const e=S.events.find(x=>x.id===eventId); if(!e) return;
+  const refs=e.referenceImages||[];
+  openSheet('Эскиз',`<div class="small dim" style="margin-bottom:6px">Рисуйте пальцем поверх схемы тела или референса.</div>
+  <select id="skBase"><option value="body">Схема: рука</option><option value="leg">Схема: нога</option><option value="torso">Схема: торс</option><option value="blank">Чистый лист</option>${refs.map((_,i)=>`<option value="r${i}" ${baseIdx===i?'selected':''}>Референс ${i+1}</option>`).join('')}</select>
+  <div class="sk-wrap" style="margin-top:8px"><canvas id="skCv" width="900" height="900"></canvas></div>
+  <div class="sk-tools" id="skTools"><button class="btn btn-sm on" data-c="#111">Чёрный</button><button class="btn btn-sm" data-c="#d11f2a">Красный</button><button class="btn btn-sm" data-c="#fff">Ластик</button>
+  <button class="btn btn-sm" id="skUndo">Отмена</button><button class="btn btn-sm" id="skClr">Очистить</button></div>
+  <input type="range" id="skW" min="2" max="24" value="5" style="width:100%">
+  <button class="btn btn-primary btn-block" style="margin-top:10px" id="skSave">Сохранить в референсы записи</button>`);
+  const cv=$('#skCv'), x=cv.getContext('2d'); let color='#111', hist=[], base=null, draw=false, last=null;
+  const paintBase=async()=>{
+    const v=$('#skBase').value; x.fillStyle='#fff'; x.fillRect(0,0,900,900);
+    if(v[0]==='r'){ const im=await loadImg(refs[+v.slice(1)]); const k=Math.min(900/im.width,900/im.height); x.drawImage(im,(900-im.width*k)/2,(900-im.height*k)/2,im.width*k,im.height*k); }
+    else if(v!=='blank'){ x.strokeStyle='#bbb'; x.lineWidth=4; x.fillStyle='#f4f4f4'; x.beginPath();
+      if(v==='body'){ x.roundRect(380,60,140,780,70); } else if(v==='leg'){ x.roundRect(350,40,200,820,90); } else { x.roundRect(250,80,400,740,120); }
+      x.fill(); x.stroke(); x.strokeStyle='#e5e5e5'; x.lineWidth=1; for(let i=100;i<900;i+=100){ x.beginPath(); x.moveTo(i,0); x.lineTo(i,900); x.moveTo(0,i); x.lineTo(900,i); x.stroke(); } }
+    base=x.getImageData(0,0,900,900); hist=[];
+  };
+  const pos=ev=>{ const r=cv.getBoundingClientRect(), t=ev.touches?ev.touches[0]:ev; return {x:(t.clientX-r.left)*900/r.width,y:(t.clientY-r.top)*900/r.height}; };
+  const st=ev=>{ ev.preventDefault(); hist.push(x.getImageData(0,0,900,900)); if(hist.length>20) hist.shift(); draw=true; last=pos(ev); mv(ev); };
+  const mv=ev=>{ if(!draw) return; ev.preventDefault(); const q=pos(ev); x.strokeStyle=color; x.lineWidth=+$('#skW').value; x.lineCap=x.lineJoin='round'; x.beginPath(); x.moveTo(last.x,last.y); x.lineTo(q.x,q.y); x.stroke(); last=q; };
+  cv.addEventListener('mousedown',st); cv.addEventListener('mousemove',mv); window.addEventListener('mouseup',()=>draw=false);
+  cv.addEventListener('touchstart',st,{passive:false}); cv.addEventListener('touchmove',mv,{passive:false}); cv.addEventListener('touchend',()=>draw=false);
+  $$('#skTools [data-c]').forEach(b=>b.onclick=()=>{ color=b.dataset.c; $$('#skTools [data-c]').forEach(z=>z.classList.toggle('on',z===b)); });
+  $('#skUndo').onclick=()=>{ const h=hist.pop(); if(h) x.putImageData(h,0,0); };
+  $('#skClr').onclick=()=>{ hist.push(x.getImageData(0,0,900,900)); x.putImageData(base,0,0); };
+  $('#skBase').onchange=paintBase; paintBase();
+  $('#skSave').onclick=async()=>{ (e.referenceImages=e.referenceImages||[]).push(cv.toDataURL('image/jpeg',0.85)); await idbPut('events',e); closeSheet(); toast('Эскиз сохранён'); closeModal(); openEventView(eventId); };
+}
+
+/* ===== аналитика, налоги ===== */
+const MON=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+let anMonths=6;
+function incomeOf(f){ return f.type==='income'; }
+RENDERERS.analytics=function(){
+  const now=new Date(), ym=now.toISOString().slice(0,7), rate=Number(S.settings.taxRate||0), goal=Number(S.settings.monthGoal||0);
+  const fin=S.finance||[]; const sum=(arr)=>arr.reduce((a,f)=>a+Number(f.amount||0),0);
+  const mInc=sum(fin.filter(f=>incomeOf(f)&&(f.date||'').startsWith(ym))), mExp=sum(fin.filter(f=>!incomeOf(f)&&(f.date||'').startsWith(ym)));
+  const tax=mInc*rate/100, net=mInc-mExp-tax, pct=goal?Math.min(100,Math.round(mInc/goal*100)):0;
+  const from=new Date(now.getFullYear(),now.getMonth()-(anMonths-1),1).toISOString().slice(0,10);
+  const months=[]; for(let i=anMonths-1;i>=0;i--){ const d=new Date(now.getFullYear(),now.getMonth()-i,1); const k=d.toISOString().slice(0,7); months.push({k,l:MON[d.getMonth()],v:sum(fin.filter(f=>incomeOf(f)&&(f.date||'').startsWith(k)))}); }
+  const mx=Math.max(1,...months.map(m=>m.v));
+  const done=S.events.filter(e=>e.status==='completed'&&e.date>=from);
+  const group=(fn,val)=>{ const a={}; done.forEach(e=>{ const k=fn(e); if(k){ a[k]=a[k]||{n:0,s:0}; a[k].n++; a[k].s+=Number(e.cost||0); } }); return Object.entries(a).sort((p,q)=>q[1].s-p[1].s||q[1].n-p[1].n).slice(0,6); };
+  const bars=(rows,fmt)=>{ const m=Math.max(1,...rows.map(r=>r[1])); return rows.length?rows.map(r=>`<div class="an-row"><span>${esc(r[0])}</span><div class="inv-b"><div class="g" style="width:${Math.max(4,r[1]/m*100)}%"></div></div><b>${fmt(r)}</b></div>`).join(''):'<p class="dim small">Пока мало данных.</p>'; };
+  const byStyle=group(e=>e.style||''), byZone=group(e=>e.zone||'');
+  const src={}; S.clients.forEach(c=>{ if(c.source) src[c.source]=(src[c.source]||0)+1; });
+  const srcRows=Object.entries(src).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const repeat=S.clients.filter(c=>Number(c.visits||0)>=2).length, pr=S.clients.length?Math.round(repeat/S.clients.length*100):0;
+  const wd=[0,0,0,0,0,0,0]; done.forEach(e=>{ wd[(new Date(e.date+'T00:00').getDay()+6)%7]++; });
+  const WD=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  $('#content').innerHTML=`
+  <div class="cl-card"><div class="cl-lbl">Налоги и цель — ${MON[now.getMonth()]} ${now.getFullYear()}</div>
+    <div class="an-big">${fmtMoney(mInc)}</div><div class="small dim">доход за месяц · расходы ${fmtMoney(mExp)}</div>
+    <div class="ev-sum" style="margin-top:8px"><div class="r"><span>Отложить на налог (${rate}%)</span><b>${fmtMoney(tax)}</b></div><div class="r"><span>Чистыми после расходов и налога</span><b>${fmtMoney(net)}</b></div></div>
+    ${goal?`<div class="cl-lbl" style="margin-top:10px">Цель ${fmtMoney(goal)} — ${pct}%</div><div class="pj-bar"><div style="width:${pct}%"></div></div><div class="small dim" style="margin-top:6px">${mInc>=goal?'Цель выполнена 🎯':'Осталось '+fmtMoney(goal-mInc)}</div>`:''}
+    <div class="field-row" style="margin-top:10px"><div><label>Налог, %</label><input type="number" id="anRate" min="0" max="100" step="0.5" value="${rate}"></div><div><label>Цель на месяц</label><input type="number" id="anGoal" min="0" value="${goal||''}"></div></div>
+    <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm btn-primary" id="anSave">Сохранить</button><button class="btn btn-sm" onclick="exportAccountant('month')">CSV за месяц</button><button class="btn btn-sm" onclick="exportAccountant('year')">CSV за год</button></div></div>
+  <div class="segmented" style="margin-bottom:12px">${[3,6,12].map(n=>`<button class="${anMonths===n?'active':''}" data-m="${n}">${n} мес.</button>`).join('')}</div>
+  <div class="cl-card"><div class="cl-lbl">Доход по месяцам</div>${months.map(m=>`<div class="an-row"><span>${m.l}</span><div class="inv-b"><div class="g" style="width:${m.v?Math.max(4,m.v/mx*100):0}%"></div></div><b>${fmtMoney(m.v)}</b></div>`).join('')}</div>
+  <div class="cl-card"><div class="cl-lbl">Стили (по выручке)</div>${bars(byStyle.map(r=>[r[0],r[1].s]),r=>fmtMoney(r[1]))}</div>
+  <div class="cl-card"><div class="cl-lbl">Зоны тела</div>${bars(byZone.map(r=>[r[0],r[1].s]),r=>fmtMoney(r[1]))}</div>
+  <div class="cl-card"><div class="cl-lbl">Откуда приходят клиенты</div>${bars(srcRows,r=>r[1])}</div>
+  <div class="cl-card"><div class="cl-lbl">Возвращаемость</div><div class="an-big">${pr}%</div><div class="small dim">клиентов приходили 2 и более раз (${repeat} из ${S.clients.length})</div></div>
+  <div class="cl-card"><div class="cl-lbl">Загрузка по дням недели</div>${bars(WD.map((d,i)=>[d,wd[i]]),r=>r[1])}</div>`;
+  $$('.segmented [data-m]').forEach(b=>b.onclick=()=>{ anMonths=+b.dataset.m; RENDERERS.analytics(); });
+  $('#anSave').onclick=async()=>{ S.settings.taxRate=Number($('#anRate').value||0); S.settings.monthGoal=Number($('#anGoal').value||0); await saveSettings(); toast('Сохранено'); RENDERERS.analytics(); };
+};
+function exportAccountant(scope){
+  const y=new Date().toISOString().slice(0,4), ym=new Date().toISOString().slice(0,7);
+  const rows=(S.finance||[]).filter(f=>(f.date||'').startsWith(scope==='year'?y:ym)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const csv='\ufeffДата;Тип;Категория;Сумма;Комментарий\n'+rows.map(f=>[f.date,f.type==='income'?'Доход':'Расход',f.category||'',f.amount,f.comment||''].map(q).join(';')).join('\n');
+  downloadBlob(new Blob([csv],{type:'text/csv;charset=utf-8'}),'finance_'+(scope==='year'?y:ym)+'.csv'); toast('Файл готов');
+}
+function gsStats(g){
+  const inc=(S.finance||[]).filter(f=>f.type==='income'&&f.date>=g.dateStart&&f.date<=g.dateEnd).reduce((a,f)=>a+Number(f.amount||0),0);
+  const exp=Number(g.expTravel||0)+Number(g.expHome||0)+Number(g.expOther||0);
+  return {inc,exp,net:inc-exp};
+}
+function clientStatusColor(st){ return {'Новый':'#3ddc84','Постоянный':'#3ddc84','VIP':'#f1c40f','Ожидает ответа':'#f1c40f','Запланирован повторный визит':'#60a5fa','Давно не был':'#ff3d47','Потерянный клиент':'#ff3d47','Неактивный':'#777'}[st]||'#777'; }
+function clientAvatarHtml(c){ const ini=(c.name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); return `<span class="cl-av">${c.avatar?`<img src="${c.avatar}" alt="">`:esc(ini)}</span>`; }
+function eventContactsHtml(c){
+  const s=v=>String(v||'').trim();
+  const url=v=>/^https?:\/\//i.test(v)?v:'https://'+v;
+  const btns=[];
+  const A=(cls,ic,label,href)=>btns.push(`<a class="${cls}" href="${esc(href)}" target="_blank" rel="noopener">${icon(ic)}<span>${label}</span></a>`);
+  const phone=s(c.phone);
+  if(phone) A('call','phone','Позвонить','tel:'+phone.replace(/[^\d+]/g,''));
+  const wa=s(c.whatsapp).replace(/[^0-9]/g,'');
+  if(wa) A('wa','phone','WhatsApp','https://wa.me/'+wa);
+  const tg=s(c.telegram);
+  if(tg) A('tg','telegram','Telegram',/^https?:\/\//i.test(tg)?tg:'https://t.me/'+tg.replace(/^@/,'').replace(/^(www\.)?(t\.me|telegram\.me)\//i,''));
+  const ig=s(c.instagram);
+  if(ig) A('ig','instagram','Instagram',/^https?:\/\//i.test(ig)?ig:'https://instagram.com/'+ig.replace(/^@/,'').replace(/^(www\.)?instagram\.com\//i,''));
+  const vk=s(c.vk);
+  if(vk) A('vk','vk','ВКонтакте',/^https?:\/\//i.test(vk)?vk:'https://vk.com/'+vk.replace(/^@/,'').replace(/^(www\.)?vk\.com\//i,''));
+  const mx=s(c.max);
+  if(mx){
+    if(/^https?:\/\//i.test(mx)||/^(www\.)?max\.ru\//i.test(mx)) A('','max','MAX',url(mx));
+    else btns.push(`<button type="button" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(mx)}');toast('ID скопирован')">${icon('max')}<span>MAX: ${esc(mx)}</span></button>`);
+  }
+  const pl=s(c.profileLink);
+  if(pl) A('','chevron','Профиль',url(pl));
+  btns.push(`<button type="button" class="add" onclick='closeModal();openClientForm(${jattr(c)})'>${icon('plus')}<span>${btns.length?'Контакты':'Добавить контакты'}</span></button>`);
+  return `<div class="ev-contacts">${btns.join('')}</div>`;
+}
+function openEventView(id){
+  const e=S.events.find(x=>x.id===id); if(!e) return;
+  e.checklistPre=e.checklistPre||{}; e.checklistPost=e.checklistPost||{};
+  const td=EVENT_TYPES[e.type]||{label:'',color:'#888'};
+  const cl=e.clientId?S.clients.find(c=>c.id===e.clientId):null;
+  const proj=e.projectId?S.projects.find(x=>x.id===e.projectId):null;
+  const dateTxt=e.date===todayISO()?'Сегодня':new Date(e.date+'T00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
+  const timeTxt=e.start?(e.start+(e.end?' – '+e.end:'')):'';
+  const total=Number(e.cost||0), prepay=Number(e.bookingAmount||0);
+  const paidNow=S.payments.filter(x=>x.eventId===e.id).reduce((a,x)=>a+Number(x.amount||0),0);
+  const remain=Math.max(0,total-prepay-paidNow);
+  const hasChecklist=['session','consult','correction','model'].includes(e.type);
+  const canFinish=hasChecklist&&!['completed','cancelled','noshow'].includes(e.status);
+  const ck=(g,list,store)=>list.map((label,i)=>`<div class="ck-row ${store[i]?'on':''}" data-g="${g}" data-i="${i}"><span class="ck">${icon('check')}</span><span>${label}</span></div>`).join('');
+  let projCard='';
+  if(proj){ const pp=projectProgress(proj); const idx=pp.sessions.findIndex(x=>x.id===e.id);
+    projCard=`<div class="ev-proj" onclick="closeModal();openProject('${proj.id}')"><div class="tag" style="color:#b794ff"><i style="background:#8e44ee"></i>Проект</div><h3>${esc(proj.title)} <small>· сеанс ${idx>=0?idx+1:'?'} из ${pp.total}</small></h3><div class="dim small">${esc([e.zone||proj.zone,e.style].filter(Boolean).join(' · '))}</div></div>`;
+  } else {
+    projCard=`<div class="ev-proj" style="background:#0d0d10;cursor:default"><div class="tag" style="color:${td.color}"><i style="background:${td.color}"></i>${esc(td.label)}</div>${e.title?`<h3 style="font-size:20px">${esc(e.title)}</h3>`:''}<div class="dim small" style="margin-top:4px">${esc([e.zone,e.style].filter(Boolean).join(' · '))}</div></div>`;
+  }
+  const det=[['Идея клиента',e.clientIdeas],['Комментарий',e.comment]].filter(r=>r[1]);
+  openModal(`<div class="cl-top"><button class="sh-back" onclick="closeModal()" aria-label="Назад">${icon('chevron')}</button><span class="cl-ttl">Запись</span><span style="flex:1"></span><button class="cl-ib" onclick="closeModal();openEventForm('${id}')" aria-label="Редактировать">${icon('edit')}</button></div>
+  ${cl?`<div class="ev-client" onclick="closeModal();openClient('${cl.id}')">${clientAvatarHtml(cl)}<div><b>${esc(cl.name)}</b><div class="cl-st"><i style="background:${clientStatusColor(cl.status)};box-shadow:0 0 8px ${clientStatusColor(cl.status)}"></i><span style="color:${clientStatusColor(cl.status)}">${esc(cl.status||'Без статуса')}</span></div></div></div>${eventContactsHtml(cl)}`:''}
+  <div class="ev-when">${icon('calendar')}<span>${dateTxt}</span>${timeTxt?`<i>·</i><span>${timeTxt}</span>`:''}</div>
+  ${projCard}
+  ${(total||prepay)?`<div class="cl-card ev-sum"><div class="cl-lbl">Стоимость</div>
+    <div class="r"><span>Всего</span><b>${fmtMoney(total)}</b></div>
+    <div class="r"><span>Предоплата</span><b>${fmtMoney(prepay)}</b></div>
+    ${paidNow?`<div class="r"><span>Оплачено после сеанса</span><b>${fmtMoney(paidNow)}</b></div>`:''}
+    <div class="r rest ${remain===0?'ok':''}"><span>Остаток</span><b>${fmtMoney(remain)}</b></div></div>`:''}
+  ${hasChecklist?`<div class="cl-card" id="evChecklist"><div class="cl-lbl">Чек-лист</div>${ck('pre',CHECKLIST_PRE,e.checklistPre)}<div class="ck-sub">После сеанса</div>${ck('post',CHECKLIST_POST,e.checklistPost)}</div>`:''}
+  ${det.length?`<div class="cl-card"><div class="cl-lbl">Детали</div>${det.map(r=>`<div class="kv"><span>${r[0]}</span><span>${esc(r[1])}</span></div>`).join('')}</div>`:''}
+  ${cl?`<div class="cl-card"><div class="cl-lbl">Референсы и эскизы</div>${(e.referenceImages||[]).length?`<div class="ref-strip">${e.referenceImages.map((r,i)=>`<img src="${r}" onclick="viewEventRef('${id}',${i})">`).join('')}</div>`:'<p class="dim small" style="margin:0 0 8px">Пока ничего не добавлено.</p>'}<div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" onclick="addEventRef('${id}')">${icon('plus')} Референс</button><button class="btn btn-sm" onclick="openSketch('${id}')">Эскиз</button></div></div>`:''}
+  ${e.status==='completed'&&cl?`<div class="cl-card"><div class="cl-lbl">Уход</div><button class="btn btn-block" onclick="openCareSheet('${id}')">${icon('message')} Инструкция по уходу — скопировать</button>${e.careSent?`<p class="small dim" style="margin:8px 0 0">Отправлено ${fmtDate(e.careSent)}${e.healCheck?' · проверка заживления '+fmtDate(e.healCheck):''}</p>`:''}</div>`:''}
+  ${canFinish?`<button class="ev-finish" onclick="completeSession('${id}')">Завершить сеанс</button>`:(e.status==='completed'?'<div class="ev-done">Сеанс завершён</div>':'')}`);
+  $('#modalBody').classList.add('client-screen'); $('#modalOverlay').classList.add('client-open');
+  $$('#evChecklist .ck-row').forEach(row=>row.onclick=async()=>{
+    const key=row.dataset.g==='pre'?'checklistPre':'checklistPost';
+    e[key][row.dataset.i]=!e[key][row.dataset.i]; row.classList.toggle('on',!!e[key][row.dataset.i]);
+    await idbPut('events',e);
+  });
+}
+function openEventMenuNoop(){}
+function clientOrLabel(e){ return e.clientId?clientName(e.clientId):(e.studentId?studentName(e.studentId):(EVENT_TYPES[e.type]?.label||'')); }
+function studentName(id){ const s=S.students.find(x=>x.id===id); return s?s.name:'—'; }
+const CHECKLIST_PRE=['Клиент подтвердил запись','Предоплата получена','Анкета заполнена','Согласие подписано','Референсы загружены','Зона и размер указаны','Цена согласована','Расходники подготовлены','Рабочее место подготовлено'];
+const CHECKLIST_POST=['Сделана фотография до','Сделана фотография после','Указаны использованные материалы','Материалы списаны со склада','Оплата получена','Остаток записан','Инструкция по уходу отправлена','Клиенту предложен следующий визит','Назначена дата проверки заживления','Работа добавлена в портфолио'];
+function checklistProgress(e){
+  const pre=e.checklistPre||{}, post=e.checklistPost||{};
+  const preDone=CHECKLIST_PRE.filter((_,i)=>pre[i]).length;
+  const postDone=CHECKLIST_POST.filter((_,i)=>post[i]).length;
+  return {preDone,preTotal:CHECKLIST_PRE.length,postDone,postTotal:CHECKLIST_POST.length};
+}
+function openChecklistSheet(eventId){
+  const e=S.events.find(x=>x.id===eventId); if(!e) return;
+  e.checklistPre=e.checklistPre||{}; e.checklistPost=e.checklistPost||{};
+  openSheet('Чек-лист сеанса', `
+    <h4>До сеанса</h4>
+    ${CHECKLIST_PRE.map((label,i)=>`<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-weight:400;padding:5px 0"><input type="checkbox" data-g="pre" data-i="${i}" ${e.checklistPre[i]?'checked':''}> ${label}</label>`).join('')}
+    <h4 style="margin-top:14px">После сеанса</h4>
+    ${CHECKLIST_POST.map((label,i)=>`<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-weight:400;padding:5px 0"><input type="checkbox" data-g="post" data-i="${i}" ${e.checklistPost[i]?'checked':''}> ${label}</label>`).join('')}
+    <p class="small dim" style="margin-top:10px">Отметки сохраняются автоматически.</p>
+  `);
+  $$('#genericSheetBody input[type=checkbox]').forEach(cb=>{
+    cb.onchange=async ()=>{
+      const g=cb.dataset.g, i=cb.dataset.i;
+      const key=g==='pre'?'checklistPre':'checklistPost';
+      e[key][i]=cb.checked;
+      await idbPut('events',e);
+      if(currentRoute==='calendar') RENDERERS.calendar();
+    };
+  });
+}
+function renderEventCard(e){
+  const prog=checklistProgress(e);
+  const showChecklist=['session','consult','correction','model'].includes(e.type);
+  const preWarn = showChecklist && prog.preDone<prog.preTotal;
+  let projectHtml='';
+  if(e.projectId){
+    const proj=S.projects.find(p=>p.id===e.projectId);
+    if(proj){
+      const pp=projectProgress(proj);
+      const idx=pp.sessions.findIndex(s=>s.id===e.id);
+      projectHtml=`<div class="project-chip" style="margin-top:6px;cursor:pointer" onclick="openProject('${proj.id}')">${icon('training')} ${esc(proj.title)} · сеанс ${idx>=0?idx+1:'?'} из ${pp.total}</div>`;
+    }
+  }
+  return `<div class="card" style="margin-bottom:8px;border-left:4px solid ${EVENT_TYPES[e.type]?.color}">
+    <div class="row" style="cursor:pointer" onclick="openEventView('${e.id}')"><b>${e.title||EVENT_TYPES[e.type]?.label}</b><span class="small dim">${fmtDate(e.date)} ${e.start||''}-${e.end||''}</span></div>
+    <div class="small dim">${clientOrLabel(e)} ${e.cost?(' · '+fmtMoney(e.cost)):''} ${e.status==='cancelled'?'· <span style="color:var(--red-soft)">отменено</span>':''}${e.status==='noshow'?'· <span style="color:var(--yellow)">неявка</span>':''}</div>
+    ${projectHtml}
+    ${showChecklist?`<div class="small" style="margin-top:6px;cursor:pointer" onclick="openChecklistSheet('${e.id}')">
+      ${preWarn?'⚠️':'✅'} Чек-лист: до ${prog.preDone}/${prog.preTotal} · после ${prog.postDone}/${prog.postTotal}
+    </div>`:''}
+    <div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+      <button class="btn btn-sm" onclick="openEventForm('${e.id}')">Редактировать</button>
+      ${e.type==='session' && e.status!=='completed' && e.status!=='cancelled' && e.status!=='noshow' ? `<button class="btn btn-sm btn-primary" onclick="completeSession('${e.id}')">Завершить сеанс</button>` : ''}
+      ${e.status!=='completed' && e.status!=='cancelled' && e.status!=='noshow' ? `<button class="btn btn-sm btn-danger" onclick="cancelEvent('${e.id}')">Отменить</button>` : ''}
+      ${e.status!=='completed' && e.status!=='cancelled' && e.status!=='noshow' ? `<button class="btn btn-sm" onclick="markNoShow('${e.id}')">Неявка</button>` : ''}
+    </div>
+  </div>`;
+}
+function cancelEvent(id){
+  const e=S.events.find(x=>x.id===id); if(!e) return;
+  confirmDialog('Отметить событие как отменённое?',async()=>{
+    e.status='cancelled'; await idbPut('events',e); closeModal(); toast('Событие отменено');
+    logAudit('edit','Событие',clientOrLabel(e),'Статус → отменено');
+    if(currentRoute==='calendar') RENDERERS.calendar();
+  });
+}
+function markNoShow(id){
+  const e=S.events.find(x=>x.id===id); if(!e) return;
+  confirmDialog('Отметить как неявку клиента? Это отдельная метрика от «отменено» — используется для решения о предоплате при бронировании.',async()=>{
+    e.status='noshow'; await idbPut('events',e); closeModal(); toast('Отмечено как неявка');
+    logAudit('edit','Событие',clientOrLabel(e),'Статус → неявка');
+    if(currentRoute==='calendar') RENDERERS.calendar();
+  });
+}
+function openDaySummary(iso){
+  const dayEvs=S.events.filter(e=>e.date===iso).sort((a,b)=>(a.start||'').localeCompare(b.start||''));
+  const counts={};
+  dayEvs.forEach(e=>counts[e.type]=(counts[e.type]||0)+1);
+  const hours=dayEvs.reduce((s,e)=>s+eventHours(e),0);
+  const workStart=S.settings.workHoursStart||10, workEnd=S.settings.workHoursEnd||20;
+  const busyRanges=dayEvs.filter(e=>e.start&&e.end).map(e=>[e.start,e.end]).sort();
+  let freeWindows=[]; let cursor=String(workStart).padStart(2,'0')+':00';
+  busyRanges.forEach(([s,e])=>{ if(s>cursor) freeWindows.push(cursor+'–'+s); cursor=e>cursor?e:cursor; });
+  if(cursor<String(workEnd).padStart(2,'0')+':00') freeWindows.push(cursor+'–'+String(workEnd).padStart(2,'0')+':00');
+  const revenue=S.finance.filter(f=>f.type==='income'&&f.date===iso).reduce((s,f)=>s+Number(f.amount||0),0);
+  const filmSales=S.healingFilmSales.filter(f=>f.date===iso);
+  const filmRevenue=filmSales.reduce((s,f)=>s+Number(f.amount||0),0);
+  const typeOrder=['session','correction','consult','model','study','university','dayoff'];
+  const typeBreakdown=typeOrder.map(k=>`<div class="kv"><span><span class="evt-dot" style="background:${EVENT_TYPES[k].color}"></span> ${EVENT_TYPES[k].label}</span><span style="${counts[k]?'':'color:var(--text-mute)'}">${counts[k]||0}</span></div>`).join('');
+  const gsToday=guestSpotsOnDate(iso);
+  const gsHtml=gsToday.length? `<div class="card" style="margin-bottom:10px;border-color:var(--pur);cursor:pointer" onclick="closeModal();openGuestSpotForm(${jattr(gsToday[0])})"><div class="row"><b>✈️ Guest Spot</b></div>${gsToday.map(g=>`<div class="small dim" style="margin-top:2px">${esc(g.city)}${g.place?(' — '+esc(g.place)):''} · ${fmtDate(g.dateStart)}–${fmtDate(g.dateEnd)}</div>`).join('')}</div>` : '';
+  openModal(`<div class="modal-header"><h3>${fmtDate(iso)}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <p class="small dim" style="margin-bottom:2px">Нажмите на дату дважды, чтобы быстро добавить событие.</p>
+  ${gsHtml}
+  <div class="grid grid-2" style="margin-bottom:10px">
+    <div class="stat"><div class="num">${dayEvs.length}</div><div class="lbl">Событий</div></div>
+    <div class="stat"><div class="num">${fmtMoney(revenue)}</div><div class="lbl">Доход за день</div></div>
+  </div>
+  <div style="margin-bottom:10px">${typeBreakdown}</div>
+  <div class="small dim" style="margin-bottom:10px">Часов занято: ${hours.toFixed(1)} · Свободные окна: ${freeWindows.join(', ')||'нет'}</div>
+  <div class="card" style="margin-bottom:10px">
+    <div class="row"><b>Заживляющая плёнка</b><span>${fmtMoney(filmRevenue)}</span></div>
+    ${filmSales.length? filmSales.map(f=>`<div class="small dim" style="margin-top:4px">${f.qty} шт. · ${clientName(f.clientId)||'без клиента'} · ${f.method||''}</div>`).join('') : '<div class="small dim" style="margin-top:4px">Продаж плёнки в этот день не было.</div>'}
+    <button class="btn btn-sm" style="margin-top:8px" onclick="closeModal();openFilmSaleForm('${iso}')">${icon('plus')} Добавить продажу плёнки</button>
+  </div>
+  ${dayEvs.map(e=>renderEventCard(e)).join('')}
+  <button class="btn btn-block btn-primary" style="margin-top:10px" onclick="closeModal();openDayAdd('${iso}')">${icon('plus')} Добавить событие</button>`);
+}
+function openFilmSaleForm(iso){
+  openModal(`<div class="modal-header"><h3>Продажа заживляющей плёнки</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <form id="filmSaleForm">
+  <label>Клиент</label><select name="clientId"><option value="">— без клиента —</option>${S.clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+  <label>Дата</label><input type="date" name="date" value="${iso||todayISO()}">
+  <div class="field-row">
+    <div><label>Количество</label><input type="number" name="qty" value="1" min="1"></div>
+    <div><label>Цена за шт.</label><input type="number" name="price" value=""></div>
+  </div>
+  <label>Способ оплаты</label><select name="method">${PAY_METHODS.map(m=>`<option>${m}</option>`).join('')}</select>
+  <label>Комментарий</label><input name="comment">
+  <div class="row" style="margin-top:14px"><span></span><button class="btn btn-primary" type="submit">Сохранить</button></div>
+  </form>`);
+  $('#filmSaleForm').onsubmit=async e=>{
+    e.preventDefault(); const fd=new FormData(e.target);
+    const qty=Number(fd.get('qty')||1), price=Number(fd.get('price')||0), amount=qty*price;
+    const sale={id:uid(),clientId:fd.get('clientId')||'',date:fd.get('date'),qty,price,amount,method:fd.get('method'),comment:fd.get('comment')};
+    await idbPut('healingFilmSales',sale); S.healingFilmSales.push(sale);
+    if(amount>0){
+      const fin={id:uid(),type:'income',category:'film',amount,date:sale.date,comment:'Продажа заживляющей плёнки'+(sale.clientId?(' · '+clientName(sale.clientId)):'')};
+      await idbPut('finance',fin); S.finance.push(fin);
+    }
+    // decrement inventory stock
+    const item=S.inventory.find(i=>i.category==='material'&&i.name==='Заживляющая плёнка');
+    if(item){ item.qty=Math.max(0,(item.qty||0)-qty); await idbPut('inventory',item); }
+    closeModal(); toast('Продажа плёнки сохранена'); computeAutoNotifications();
+    if(currentRoute==='calendar') RENDERERS.calendar();
+  };
+}
+function openDayAdd(iso){
+  openSheet('Добавить · '+fmtDate(iso), `<div class="btn-row">
+    <button class="btn btn-block" onclick="closeSheet();openEventForm(null,{date:'${iso}',type:'session'})">${icon('plus')} Сеанс</button>
+    <button class="btn btn-block" onclick="closeSheet();openEventForm(null,{date:'${iso}',type:'consult'})">${icon('plus')} Консультация</button>
+    <button class="btn btn-block" onclick="closeSheet();openEventForm(null,{date:'${iso}'})">${icon('plus')} Другое событие</button>
+    <button class="btn btn-block" onclick="closeSheet();openTaskForm({date:'${iso}'})">${icon('plus')} Задача</button>
+    <button class="btn btn-block" onclick="closeSheet();openFilmSaleForm('${iso}')">${icon('plus')} Продажа плёнки</button>
+  </div>`);
+}
+function openEventForm(id,presets){
+  const existing=id?S.events.find(e=>e.id===id):null;
+  const e=existing||{id:null,title:'',type:(presets&&presets.type)||'session',date:(presets&&presets.date)||todayISO(),start:'10:00',end:'11:00',clientId:(presets&&presets.clientId)||'',studentId:'',cost:'',bookingAmount:'',comment:'',link:'',reminder:'',status:'planned',homeworkId:'',serviceType:'Тату',zone:'',styles:[],clientIdeas:'',referenceImages:[]};
+  const client=e.clientId?S.clients.find(c=>c.id===e.clientId):null;
+  const isTattooEvent=['session','correction','model'].includes(e.type);
+  openModal(`<div class="modal-header"><h3>${existing?'Событие':'Новое событие'}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <form id="eventForm">
+  <label>Тип события</label>
+  <select name="type" id="evtTypeSelect">${Object.entries(EVENT_TYPES).map(([k,d])=>`<option value="${k}" ${e.type===k?'selected':''}>${d.label}</option>`).join('')}</select>
+  <label>Название (необязательно)</label><input name="title" value="${esc(e.title)}">
+  <label>Дата</label><input type="date" name="date" value="${e.date}">
+  <div class="field-row">
+    <div><label>Начало</label><input type="time" name="start" value="${e.start||''}"></div>
+    <div><label>Окончание</label><input type="time" name="end" value="${e.end||''}"></div>
+  </div>
+  <label>Клиент</label><select name="clientId" id="evtClientSelect"><option value="">—</option>${S.clients.map(c=>`<option value="${c.id}" ${e.clientId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}<option value="__new__">+ Новый клиент…</option></select>
+  <label>Контакты</label>
+  <div id="evtContactsRow"></div>
+  <label>Ученик</label><select name="studentId"><option value="">—</option>${S.students.map(st=>`<option value="${st.id}" ${e.studentId===st.id?'selected':''}>${esc(st.name)}</option>`).join('')}</select>
+
+  <div id="evtTattooBlock" class="${isTattooEvent?'':'hidden'}">
+    <label>Тип услуги</label>
+    <div id="serviceTypeWrap">${SERVICE_TYPES.map(s=>`<span class="chip chip-solid ${e.serviceType===s?'active':''}" data-s="${s}">${s}</span>`).join('')}</div>
+    <label>Какая конечность / зона тела</label>
+    <div id="zoneWrap">${BODY_ZONES.map(z=>`<span class="chip ${e.zone===z?'active':''}" data-z="${z}">${z}</span>`).join('')}</div>
+    <label>Стили</label>
+    <div id="styleWrap">${STYLE_TAGS.map(s=>`<span class="chip ${(e.styles||[]).includes(s)?'active':''}" data-st="${s}">${s}</span>`).join('')}</div>
+    <label>Идеи клиента</label><textarea name="clientIdeas" rows="2" placeholder="Что хочет клиент...">${esc(e.clientIdeas||'')}</textarea>
+    <label>Рефференсы</label>
+    <div class="ref-grid" id="refGrid"></div>
+    <input type="file" id="refFileInput" accept="image/*" multiple class="hidden">
+    <label>Проект (если это часть многосеансовой работы)</label>
+    <select name="projectId" id="evtProjectSelect"><option value="">— без проекта —</option></select>
+    <label>Бронь</label><input type="number" name="bookingAmount" id="evtBookingInput" value="${e.bookingAmount}">
+    <div class="small dim" id="evtRemainderText" style="margin:2px 0 6px"></div>
+  </div>
+  <label>Стоимость</label><input type="number" name="cost" id="evtCostInput" value="${e.cost}">
+  <label>Напоминание</label><input name="reminder" value="${esc(e.reminder)}" placeholder="за 1 день...">
+  <label>Ссылка</label><input name="link" value="${esc(e.link)}">
+  <label>Комментарий</label><textarea name="comment" rows="2">${esc(e.comment)}</textarea>
+  <div class="row" style="margin-top:14px">
+    ${existing?`<button type="button" class="btn btn-danger" onclick="deleteEvent('${e.id}')">Удалить</button>`:'<span></span>'}
+    <button type="submit" class="btn btn-primary">Сохранить</button>
+  </div>
+  </form>`);
+
+  let refImages=(e.referenceImages||[]).slice();
+  function renderRefGrid(){
+    $('#refGrid').innerHTML = refImages.map((src,i)=>`<div style="position:relative"><img src="${src}"><button type="button" class="btn btn-icon btn-sm" style="position:absolute;top:2px;right:2px" onclick="event.stopPropagation();this.closest('div').remove();window._evtRefRemove(${i})">${icon('close')}</button></div>`).join('') + `<div class="ref-add" id="refAddTile">${icon('plus')}</div>`;
+    $('#refAddTile').onclick=()=>$('#refFileInput').click();
+  }
+  window._evtRefRemove=(i)=>{ refImages.splice(i,1); renderRefGrid(); };
+  renderRefGrid();
+  $('#refFileInput').onchange=e2=>{
+    const files=Array.from(e2.target.files||[]);
+    let remaining=files.length;
+    files.forEach(f=>{
+      const reader=new FileReader();
+      reader.onload=ev=>{ refImages.push(ev.target.result); renderRefGrid(); };
+      reader.readAsDataURL(f);
+    });
+    e2.target.value='';
+  };
+
+  function updateRemainder(){
+    const cost=Number($('#eventForm [name=cost]')?.value||0);
+    const booking=Number($('#evtBookingInput')?.value||0);
+    $('#evtRemainderText').textContent = cost||booking ? `Остаток к оплате: ${fmtMoney(Math.max(0,cost-booking))}` : '';
+  }
+  $('#eventForm').addEventListener('input',ev=>{ if(ev.target.name==='cost'||ev.target.id==='evtBookingInput') updateRemainder(); });
+  updateRemainder();
+
+  function renderContacts(){
+    const c=S.clients.find(x=>x.id===$('#evtClientSelect').value);
+    $('#evtContactsRow').innerHTML = `<div class="contact-ic-row">${contactIconsRowHtml(c)}</div>`;
+  }
+  function renderProjectOptions(){
+    const sel=$('#evtProjectSelect'); if(!sel) return;
+    const clientId=$('#evtClientSelect').value;
+    const list=S.projects.filter(p=>p.clientId===clientId);
+    sel.innerHTML = `<option value="">— без проекта —</option>` +
+      list.map(p=>`<option value="${p.id}" ${e.projectId===p.id?'selected':''}>${esc(p.title)}</option>`).join('') +
+      (clientId?`<option value="__new__">+ Новый проект…</option>`:'');
+  }
+  window._refreshEvtContacts=renderContacts;
+  renderContacts();
+  renderProjectOptions();
+  $('#evtProjectSelect').onchange=ev=>{
+    if(ev.target.value==='__new__'){
+      ev.target.value='';
+      const clientId=$('#evtClientSelect').value;
+      if(!clientId){ toast('Сначала выберите клиента'); return; }
+      openQuickProjectSheet(clientId,'evtProjectSelect');
+      return;
+    }
+  };
+  $('#evtClientSelect').onchange=async ev=>{
+    if(ev.target.value==='__new__'){
+      ev.target.value='';
+      openQuickClientSheet('evtClientSelect');
+      return;
+    }
+    renderContacts();
+    renderProjectOptions();
+  };
+
+  $('#evtTypeSelect').onchange=e2=>{ $('#evtTattooBlock').classList.toggle('hidden',!['session','correction','model'].includes(e2.target.value)); };
+  $$('#serviceTypeWrap .chip').forEach(ch=>ch.onclick=()=>{ $$('#serviceTypeWrap .chip').forEach(x=>x.classList.remove('active')); ch.classList.add('active'); });
+  $$('#zoneWrap .chip').forEach(ch=>ch.onclick=()=>{ $$('#zoneWrap .chip').forEach(x=>x.classList.remove('active')); ch.classList.add('active'); });
+  $$('#styleWrap .chip').forEach(ch=>ch.onclick=()=>ch.classList.toggle('active'));
+
+  $('#eventForm').onsubmit=async ev=>{
+    ev.preventDefault();
+    const fd=new FormData(ev.target);
+    const obj={...e}; fd.forEach((v,k)=>obj[k]=v);
+    obj.serviceType=$('#serviceTypeWrap .chip.active')?.dataset.s||'';
+    obj.zone=$('#zoneWrap .chip.active')?.dataset.z||'';
+    obj.styles=$$('#styleWrap .chip.active').map(c=>c.dataset.st);
+    obj.referenceImages=refImages;
+    if(!obj.id) obj.id=uid();
+    if(!obj.status) obj.status='planned';
+    const overlaps=findOverlappingEvents(obj.date,obj.start,obj.end,obj.id);
+    if(overlaps.length){
+      const list=overlaps.map(o=>`${o.start||'?'}–${o.end||'?'} · ${EVENT_TYPES[o.type]?.label||o.type}${o.clientId?(' · '+clientName(o.clientId)):''}`).join('; ');
+      confirmDialog(`На это время уже есть запись: ${list}. Сохранить всё равно?`,()=>finalizeEventSave(obj));
+    } else {
+      finalizeEventSave(obj);
+    }
+  };
+}
+function findOverlappingEvents(date,start,end,excludeId){
+  if(!date||!start||!end) return [];
+  return S.events.filter(ev=>ev.id!==excludeId && ev.date===date && ev.status!=='cancelled' && ev.status!=='noshow' && ev.start && ev.end && (start<ev.end && end>ev.start));
+}
+async function finalizeEventSave(obj){
+  await idbPut('events',obj);
+  const idx=S.events.findIndex(x=>x.id===obj.id);
+  if(idx>=0) S.events[idx]=obj; else S.events.push(obj);
+  closeModal(); toast('Событие сохранено');
+  if(currentRoute==='calendar') RENDERERS.calendar(); else go('calendar');
+}
+function deleteEvent(id){
+  const ev=S.events.find(x=>x.id===id);
+  const label=ev?((EVENT_TYPES[ev.type]?.label||'')+(ev.clientId?(' · '+clientName(ev.clientId)):'')):'';
+  confirmDialog('Удалить событие?',()=>{
+    trashDelete({store:'events',listKey:'events',id,message:'Событие удалено.',auditEntity:'Событие',auditLabel:label,onChange:()=>{ if(currentRoute==='calendar') RENDERERS.calendar(); }});
+  });
+}
+function openTaskForm(presets){
+  openModal(`<div class="modal-header"><h3>Новая задача</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <form id="taskForm">
+  <label>Текст задачи</label><textarea name="text" rows="2" required></textarea>
+  <label>Дата</label><input type="date" name="date" value="${(presets&&presets.date)||todayISO()}">
+  <div class="row" style="margin-top:14px"><span></span><button class="btn btn-primary" type="submit">Сохранить</button></div>
+  </form>`);
+  $('#taskForm').onsubmit=async e=>{
+    e.preventDefault();
+    const fd=new FormData(e.target);
+    const obj={id:uid(),text:fd.get('text'),date:fd.get('date'),done:false};
+    await idbPut('tasks',obj); S.tasks.push(obj);
+    closeModal(); toast('Задача добавлена');
+  };
+}
+
+/* ====================== SESSION COMPLETION (Итоги сеанса) ====================== */
+function completeSession(eventId){
+  const e=S.events.find(x=>x.id===eventId); if(!e) return;
+  const prog=checklistProgress(e);
+  if(prog.preDone<prog.preTotal){
+    confirmDialog(`Чек-лист «до сеанса» заполнен не полностью (${prog.preDone}/${prog.preTotal}). Всё равно завершить сеанс?`, ()=>completeSessionForm(eventId));
+    return;
+  }
+  completeSessionForm(eventId);
+}
+function completeSessionForm(eventId){
+  const e=S.events.find(x=>x.id===eventId); if(!e) return;
+  const client=S.clients.find(c=>c.id===e.clientId);
+  openModal(`<div class="modal-header"><h3>Итоги сеанса${client?': '+esc(client.name):''}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <form id="sessionSummaryForm">
+  <h4>Оплата</h4>
+  <div class="field-row">
+    <div><label>Стоимость</label><input type="number" name="cost" value="${e.cost||''}"></div>
+    <div><label>Бронирование даты</label><input type="number" name="bookingAmount" value="${e.bookingAmount||''}"></div>
+    <div><label>Оплачено сейчас</label><input type="number" name="paidNow" value=""></div>
+  </div>
+  <label>Способ оплаты</label><select name="method">${PAY_METHODS.map(m=>`<option>${m}</option>`).join('')}</select>
+  <label>Статус оплаты</label><select name="payStatus">${PAY_STATUS.map(s=>`<option>${s}</option>`).join('')}</select>
+
+  <h4 style="margin-top:14px">Работа</h4>
+  <div class="field-row">
+    <div><label>Стиль</label><input name="style" value="${esc(e.style||'')}"></div>
+    <div><label>Размер</label><input name="size" value=""></div>
+    <div><label>Зона</label><input name="zone" value=""></div>
+  </div>
+  <div class="field-row">
+    <div><label>Часов</label><input type="number" name="hours" value=""></div>
+  </div>
+  <label>Что сделали</label><textarea name="workDone" rows="2"></textarea>
+  <label>Что получилось хорошо / что осталось</label><textarea name="workNotes" rows="2"></textarea>
+
+  <h4 style="margin-top:14px">Расход картриджей</h4>
+  <div id="cartridgeRows"></div>
+  <button type="button" class="btn btn-sm" id="addCartRow">+ Строка картриджа</button>
+
+  <h4 style="margin-top:14px">Общение</h4>
+  <textarea name="talkAbout" rows="2" placeholder="О чём говорили, интересные и нежелательные темы"></textarea>
+  <div id="quickNotesWrap2" style="margin-top:6px">${QUICK_NOTES.map(n=>`<span class="chip" data-n="${esc(n)}">${n}</span>`).join('')}</div>
+
+  <h4 style="margin-top:14px">Продолжение</h4>
+  <div class="field-row">
+    <div><label>На чём остановились</label><input name="stoppedAt"></div>
+    <div><label>Дата продолжения</label><input type="date" name="continueDate"></div>
+  </div>
+
+  <h4 style="margin-top:14px">После сеанса</h4>
+  <div id="afterChecks">
+    ${['Выданы рекомендации','Продана заживляющая плёнка','Отправлены рекомендации','Напоминание через неделю','Напоминание через месяц','Напоминание через два месяца','Просьба оставить отзыв'].map(x=>`<label style="display:flex;align-items:center;gap:6px;text-transform:none;font-weight:400"><input type="checkbox" name="after" value="${x}"> ${x}</label>`).join('')}
+  </div>
+
+  <div class="row" style="margin-top:14px">
+    <button type="button" class="btn" onclick="closeModal()">Сохранить черновик позже</button>
+    <button type="submit" class="btn btn-primary">Сохранить итоги</button>
+  </div>
+  </form>`);
+  $$('#quickNotesWrap2 .chip').forEach(ch=>ch.onclick=()=>ch.classList.toggle('active'));
+  function addCartRow(){
+    const row=document.createElement('div');
+    row.className='field-row cart-row';
+    row.innerHTML=`<div><select class="cc">${CARTRIDGE_CONFIGS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div><input class="csize" placeholder="Размер, напр. 1203"></div>
+    <div><input class="cqty" type="number" value="1" style="width:70px"></div>
+    <button type="button" class="btn btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+    $('#cartridgeRows').appendChild(row);
+  }
+  $('#addCartRow').onclick=addCartRow; addCartRow();
+  $('#sessionSummaryForm').onsubmit=async ev=>{
+    ev.preventDefault();
+    const fd=new FormData(ev.target);
+    const cost=Number(fd.get('cost')||0), booking=Number(fd.get('bookingAmount')||0), paidNow=Number(fd.get('paidNow')||0);
+    e.cost=cost; e.bookingAmount=booking; e.status='completed'; e.style=fd.get('style');
+    await idbPut('events',e);
+    logAudit('edit','Событие',clientOrLabel(e),'Статус → завершено'+(paidNow?(', оплата '+fmtMoney(paidNow)+' ('+(fd.get('payStatus')||'')+')'):''));
+    // payment record
+    if(paidNow>0){
+      const pay={id:uid(),eventId:e.id,clientId:e.clientId,amount:paidNow,date:todayISO(),method:fd.get('method'),status:fd.get('payStatus'),comment:'Оплата по сеансу'};
+      await idbPut('payments',pay); S.payments.push(pay);
+      const fin={id:uid(),type:'income',category:'tattoo',amount:paidNow,date:todayISO(),comment:'Сеанс: '+(client?client.name:''),eventId:e.id};
+      await idbPut('finance',fin); S.finance.push(fin);
+    }
+    // tattoo work record
+    const work={id:uid(),eventId:e.id,clientId:e.clientId,style:fd.get('style'),size:fd.get('size'),zone:fd.get('zone'),hours:fd.get('hours'),workDone:fd.get('workDone'),workNotes:fd.get('workNotes'),talkAbout:fd.get('talkAbout'),quickNotes:$$('#quickNotesWrap2 .chip.active').map(c=>c.dataset.n),stoppedAt:fd.get('stoppedAt'),continueDate:fd.get('continueDate'),after:fd.getAll('after'),date:todayISO()};
+    await idbPut('tattooWork',work); S.tattooWork.push(work);
+    // cartridge usage -> decrement inventory
+    $$('.cart-row').forEach(async row=>{
+      const config=row.querySelector('.cc').value, size=row.querySelector('.csize').value, qty=Number(row.querySelector('.cqty').value||0);
+      if(qty>0){
+        const usage={id:uid(),eventId:e.id,config,size,qty,date:todayISO(),context:'session'};
+        idbPut('cartridgeUsage',usage); S.cartridgeUsage.push(usage);
+        decrementInventoryCartridge(config,size,qty);
+      }
+    });
+    // update client stats
+    if(client){
+      client.visits=(client.visits||0)+1;
+      client.totalSum=(Number(client.totalSum||0))+paidNow;
+      client.lastVisit=todayISO();
+      if(client.status==='Новый') client.status='Постоянный';
+      if(fd.get('continueDate')) client.nextContact=fd.get('continueDate');
+      await idbPut('clients',client);
+    }
+    // after-session reminders explicit
+    const after=fd.getAll('after');
+    if(after.includes('Напоминание через неделю')) {}
+    closeModal(); toast('Итоги сеанса сохранены'); computeAutoNotifications();
+    if(currentRoute==='calendar') RENDERERS.calendar();
+  };
+}
+function findOrCreateInventoryItem(category,name,unit){
+  let item=S.inventory.find(i=>i.category===category && i.name===name);
+  return item;
+}
+function decrementInventoryCartridge(config,size,qty){
+  const name=`Картридж ${config}${size?(' '+size):''}`;
+  let item=S.inventory.find(i=>i.category==='cartridge' && i.config===config && (i.size||'')===(size||''));
+  if(!item){
+    item={id:uid(),category:'cartridge',config,size,name,qty:0,threshold:S.settings.thresholds.cartridge,unit:'шт.'};
+  }
+  item.qty=Math.max(0,(item.qty||0)-qty);
+  item.usedTotal=(item.usedTotal||0)+qty;
+  idbPut('inventory',item);
+  const idx=S.inventory.findIndex(i=>i.id===item.id);
+  if(idx>=0) S.inventory[idx]=item; else S.inventory.push(item);
+}
+
+/* ====================== FINANCE ====================== */
+let financePeriod='month';
+const INCOME_CATEGORIES={tattoo:'Татуировки',consult:'Консультации',correction:'Коррекции',training:'Менторство',film:'Продажа заживляющей плёнки'};
+const EXPENSE_CATEGORIES={cartridges:'Картриджи',pigments:'Пигменты',transferPaper:'Трансферная бумага',oilFoam:'Масло/пенка',lidocaine:'Ледокаин',rent:'Аренда',travel:'Guest Spot / поездки',other:'Другое'};
+function periodRangeISO(period,offset){
+  offset=offset||0;
+  const now=new Date();
+  let start,end;
+  if(period==='day'){ start=new Date(now); start.setDate(start.getDate()+offset); end=new Date(start); }
+  else if(period==='week'){ start=new Date(now); start.setDate(now.getDate()-((now.getDay()+6)%7)+offset*7); end=new Date(start); end.setDate(start.getDate()+6); }
+  else if(period==='month'){ start=new Date(now.getFullYear(),now.getMonth()+offset,1); end=new Date(now.getFullYear(),now.getMonth()+offset+1,0); }
+  else if(period==='quarter'){ const qAbs=Math.floor(now.getMonth()/3)+offset; const y=now.getFullYear()+Math.floor(qAbs/4); const qq=((qAbs%4)+4)%4; start=new Date(y,qq*3,1); end=new Date(y,qq*3+3,0); }
+  else if(period==='year'){ start=new Date(now.getFullYear()+offset,0,1); end=new Date(now.getFullYear()+offset,11,31); }
+  else { start=new Date(2000,0,1); end=new Date(now); }
+  return {start:start.toISOString().slice(0,10),end:end.toISOString().slice(0,10)};
+}
+function pctChange(cur,prev){
+  if(!prev) return cur>0?100:0;
+  return Math.round((cur-prev)/prev*100);
+}
+function trendHtml(pct){
+  if(!isFinite(pct)) return '';
+  const up=pct>=0;
+  return `<span class="trend ${up?'up':'down'}">${up?'↗':'↘'} ${up?'+':''}${pct}%</span>`;
+}
+function buildIncomeSeries(startISO,endISO,granularity){
+  const points=[]; let cur=new Date(startISO); const end=new Date(endISO);
+  let guard=0;
+  while(cur<=end && guard<400){
+    guard++;
+    let bucketEndDate;
+    if(granularity==='day') bucketEndDate=new Date(cur);
+    else if(granularity==='week'){ bucketEndDate=new Date(cur); bucketEndDate.setDate(bucketEndDate.getDate()+6); }
+    else bucketEndDate=new Date(cur.getFullYear(),cur.getMonth()+1,0);
+    const bStart=cur.toISOString().slice(0,10);
+    const bEnd=(bucketEndDate>end?end:bucketEndDate).toISOString().slice(0,10);
+    const val=S.finance.filter(f=>f.type==='income'&&f.date>=bStart&&f.date<=bEnd).reduce((s,f)=>s+Number(f.amount||0),0);
+    const label=granularity==='month'? cur.toLocaleDateString('ru-RU',{month:'short'}) : String(cur.getDate());
+    points.push({label,value:val});
+    if(granularity==='day') cur.setDate(cur.getDate()+1);
+    else if(granularity==='week') cur.setDate(cur.getDate()+7);
+    else cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);
+  }
+  return points;
+}
+RENDERERS.finance=function(){
+  const items=S.finance.filter(f=>financeScope(f));
+  const income=items.filter(f=>f.type==='income').reduce((s,f)=>s+Number(f.amount||0),0);
+  const expense=items.filter(f=>f.type==='expense').reduce((s,f)=>s+Number(f.amount||0),0);
+  window._finItems=items;
+
+  const {start,end}=periodRangeISO(financePeriod,0);
+  const prevRange=periodRangeISO(financePeriod,-1);
+  const periodEvts=S.events.filter(e=>e.date>=start&&e.date<=end);
+  const prevEvts=S.events.filter(e=>e.date>=prevRange.start&&e.date<=prevRange.end);
+  const recordsCount=periodEvts.length;
+  const prevRecordsCount=prevEvts.length;
+  const avgCheck=recordsCount? income/recordsCount : 0;
+
+  const newClients=S.clients.filter(c=>c.firstVisit && c.firstVisit>=start && c.firstVisit<=end).length;
+  const prevNewClients=S.clients.filter(c=>c.firstVisit && c.firstVisit>=prevRange.start && c.firstVisit<=prevRange.end).length;
+  const repeatClientIds=new Set(periodEvts.filter(e=>{ const c=S.clients.find(x=>x.id===e.clientId); return c && (c.visits||0)>1; }).map(e=>e.clientId));
+  const prevRepeatClientIds=new Set(prevEvts.filter(e=>{ const c=S.clients.find(x=>x.id===e.clientId); return c && (c.visits||0)>1; }).map(e=>e.clientId));
+  const cancelled=periodEvts.filter(e=>e.status==='cancelled').length;
+  const prevCancelled=prevEvts.filter(e=>e.status==='cancelled').length;
+  const noshow=periodEvts.filter(e=>e.status==='noshow').length;
+  const prevNoshow=prevEvts.filter(e=>e.status==='noshow').length;
+  const workHours=periodEvts.filter(e=>['session','consult','correction','model'].includes(e.type)).reduce((s,e)=>s+eventHours(e),0);
+  let fcList=[];
+  try{
+    const fcToday=todayISO();
+    if(financePeriod!=='all') fcList=periodEvts.filter(e=>!['completed','cancelled','noshow'].includes(e.status)&&e.date>=fcToday&&Number(e.cost||0)>0).map(e=>{
+      const paid=(S.payments||[]).filter(p=>p.eventId===e.id).reduce((a,p)=>a+Number(p.amount||0),0);
+      return {e,rest:Math.max(0,Number(e.cost||0)-Number(e.bookingAmount||0)-paid)};
+    }).filter(x=>x.rest>0).sort((a,b)=>String((a.e.date||'')+(a.e.start||'')).localeCompare(String((b.e.date||'')+(b.e.start||''))));
+  }catch(err){ console.error('forecast',err); fcList=[]; }
+  const fcExpected=fcList.reduce((s,x)=>s+x.rest,0);
+  const fcN=fcList.length, fcCount=fcN+' '+((fcN%10===1&&fcN%100!==11)?'запись':([2,3,4].includes(fcN%10)&&![12,13,14].includes(fcN%100))?'записи':'записей');
+  window._finForecast=fcList;
+  const fcLabel={day:'сегодня',week:'до конца недели',month:'до конца месяца',quarter:'до конца квартала',year:'до конца года'}[financePeriod]||'';
+
+  const granularity = financePeriod==='year' ? 'month' : financePeriod==='quarter' ? 'week' : 'day';
+  const seriesRange = financePeriod==='all' ? periodRangeISO('year',0) : {start,end};
+  const chartPoints=buildIncomeSeries(seriesRange.start,seriesRange.end,granularity);
+
+  $('#content').innerHTML=`
+  <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
+    <span></span>
+    <button class="btn btn-primary btn-icon btn-sm" onclick="openFinanceForm()">${icon('plus')}</button>
+  </div>
+  <div class="fin-pair">
+    <div class="fin-card inc">${icon('coin')}<div class="fl">Доход</div><div class="fv">${finVal(fmtMoney(income))}</div></div>
+    <div class="fin-card exp">${icon('reports')}<div class="fl">Расходы</div><div class="fv">${finVal(fmtMoney(expense))}</div></div>
+  </div>
+  ${financePeriod!=='all'?`<div class="fin-forecast" onclick="openForecastSheet()">
+    <div><div class="fl">Ещё заработаю ${fcLabel}</div><div class="fv">+${finVal(fmtMoney(fcExpected))}</div><div class="small dim">${fcList.length?fcCount+' с неоплаченным остатком':'Нет предстоящих записей с остатком'}</div></div>
+    <div class="tot"><div class="fl">Итого за период</div><div class="fv">${finVal(fmtMoney(income+fcExpected))}</div><div class="small dim">с учётом прогноза</div></div>
+  </div>`:''}
+  <div class="segmented" style="margin-bottom:14px">${['day','week','month','quarter','year','all'].map(p=>`<button class="${financePeriod===p?'active':''}" onclick="setFinPeriod('${p}')">${{day:'День',week:'Неделя',month:'Месяц',quarter:'Квартал',year:'Год',all:'Всё'}[p]}</button>`).join('')}</div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="sec-label" style="margin:0">Прибыль</div><div class="profit">${finVal(fmtMoney(income-expense))}</div><div class="small dim" style="margin-bottom:4px">График: доход, ${(S.settings.currency||'₽')}</div>
+    ${S.settings.hideFinance? '<p class="dim small" style="padding:40px 0;text-align:center">График скрыт (Настройки → Безопасность)</p>' : '<canvas id="finMainChart" style="width:100%;height:170px"></canvas>'}
+  </div>
+  <div class="grid grid-2" style="margin-bottom:8px">
+    <div class="analytics-card">
+      <div class="ic-wrap">${icon('clientAdd')}</div>
+      <div class="body"><div class="l">Новые клиенты</div><div class="n">${newClients} ${trendHtml(pctChange(newClients,prevNewClients))}</div></div>
+    </div>
+    <div class="analytics-card">
+      <div class="ic-wrap">${icon('repeat')}</div>
+      <div class="body"><div class="l">Повторные клиенты</div><div class="n">${repeatClientIds.size} ${trendHtml(pctChange(repeatClientIds.size,prevRepeatClientIds.size))}</div></div>
+    </div>
+    <div class="analytics-card">
+      <div class="ic-wrap">${icon('close')}</div>
+      <div class="body"><div class="l">Отмены</div><div class="n">${cancelled} ${trendHtml(pctChange(cancelled,prevCancelled))}</div></div>
+    </div>
+    <div class="analytics-card">
+      <div class="ic-wrap">${icon('close')}</div>
+      <div class="body"><div class="l">Неявки</div><div class="n">${noshow} ${trendHtml(pctChange(noshow,prevNoshow))}</div></div>
+    </div>
+    <div class="analytics-card">
+      <div class="ic-wrap">${icon('clock')}</div>
+      <div class="body"><div class="l">Часы работы</div><div class="n">${workHours.toFixed(1)}ч</div></div>
+    </div>
+  </div>
+  <div class="tile-grid" style="margin:14px 0">
+    <div class="tile" onclick="openFinCategories()">${icon('reports','ic')}<span>Категории</span></div>
+    <div class="tile" onclick="openFinOperations()">${icon('data','ic')}<span>Операции (${items.length})</span></div>
+    <div class="tile" onclick="openFinChart()">${icon('chart','ic')}<span>По категориям</span></div>
+    <div class="tile" onclick="exportCSV('finance')">${icon('edit','ic')}<span>Экспорт</span></div>
+  </div>
+  <p class="small dim">* В доход не входят расходные материалы (картриджи, пигменты, бумага и т.д.) и зарплаты мастеров. Изменение % — по сравнению с предыдущим таким же периодом.</p>`;
+  if(!S.settings.hideFinance) setTimeout(()=>drawLineChart($('#finMainChart'),chartPoints),20);
+};
+function openFinCategories(){
+  const items=window._finItems||[];
+  const byIncomeCat={}; items.filter(f=>f.type==='income').forEach(f=>byIncomeCat[f.category]=(byIncomeCat[f.category]||0)+Number(f.amount||0));
+  const byExpenseCat={}; items.filter(f=>f.type==='expense').forEach(f=>byExpenseCat[f.category]=(byExpenseCat[f.category]||0)+Number(f.amount||0));
+  openSheet('Категории', `
+  <h4>Доход по категориям</h4>
+  ${Object.entries(byIncomeCat).map(([k,v])=>`<div class="kv"><span>${INCOME_CATEGORIES[k]||k}</span><span>${fmtMoney(v)}</span></div>`).join('')||'<p class="dim">Нет данных</p>'}
+  <h4 style="margin-top:14px">Расходы по категориям</h4>
+  ${Object.entries(byExpenseCat).map(([k,v])=>`<div class="kv"><span>${EXPENSE_CATEGORIES[k]||k}</span><span>${fmtMoney(v)}</span></div>`).join('')||'<p class="dim">Нет данных</p>'}`);
+}
+function openFinOperations(){
+  const items=(window._finItems||[]).slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  openSheet('Операции', items.length? `<div class="table-wrap"><table><tr><th>Дата</th><th>Тип</th><th>Категория</th><th>Сумма</th><th></th></tr>${items.map(f=>`<tr><td>${fmtDate(f.date)}</td><td>${f.type==='income'?'Доход':'Расход'}</td><td>${(INCOME_CATEGORIES[f.category]||EXPENSE_CATEGORIES[f.category]||f.category||'')}</td><td>${fmtMoney(f.amount)}</td><td><button class="btn btn-icon btn-sm" onclick="deleteFinance('${f.id}')">${icon('close')}</button></td></tr>`).join('')}</table></div>` : '<p class="dim">Операций нет.</p>');
+}
+function openFinChart(){
+  const items=window._finItems||[];
+  openSheet('По категориям дохода', `<canvas id="finChartCanvas" style="width:100%;height:200px"></canvas>`);
+  const canvas=$('#finChartCanvas');
+  const income=items.filter(f=>f.type==='income').reduce((s,f)=>s+Number(f.amount||0),0);
+  const expense=items.filter(f=>f.type==='expense').reduce((s,f)=>s+Number(f.amount||0),0);
+  const byIncomeCat={}; items.filter(f=>f.type==='income').forEach(f=>byIncomeCat[f.category]=(byIncomeCat[f.category]||0)+Number(f.amount||0));
+  const catSeries=Object.entries(byIncomeCat).map(([k,v])=>({label:(INCOME_CATEGORIES[k]||k).slice(0,6),value:v,color:'#20B2AA'}));
+  const series=[{label:'Доход',value:income,color:'#2ecc71'},{label:'Расход',value:expense,color:'#c62b28'},...catSeries];
+  setTimeout(()=>drawBarChart(canvas,series),20);
+}
+function financeScope(f){
+  if(!f.date) return financePeriod==='all';
+  const now=new Date(); const d=new Date(f.date);
+  if(financePeriod==='all') return true;
+  if(financePeriod==='day') return f.date===todayISO();
+  if(financePeriod==='week'){ const r=periodRangeISO('week',0); return f.date>=r.start&&f.date<=r.end; }
+  if(financePeriod==='month') return f.date.slice(0,7)===now.toISOString().slice(0,7);
+  if(financePeriod==='quarter'){ const q=Math.floor(now.getMonth()/3); return d.getFullYear()===now.getFullYear() && Math.floor(d.getMonth()/3)===q; }
+  if(financePeriod==='year') return d.getFullYear()===now.getFullYear();
+  return true;
+}
+function openForecastSheet(){
+  const list=window._finForecast||[];
+  const total=list.reduce((s,x)=>s+x.rest,0);
+  openSheet('Ожидаемые поступления', list.length?`
+    <div class="small dim" style="margin-bottom:8px">Остаток по предстоящим записям (стоимость − предоплата − уже внесённые оплаты).</div>
+    ${list.map(x=>`<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line);cursor:pointer" onclick="closeSheet();openEventView('${x.e.id}')"><span>${fmtDate(x.e.date)}${x.e.start?' · '+x.e.start:''} — ${esc(clientOrLabel(x.e))}</span><b>${finVal(fmtMoney(x.rest))}</b></div>`).join('')}
+    <div class="row" style="margin-top:10px"><b>Всего</b><b>${finVal(fmtMoney(total))}</b></div>`
+    :'<p class="dim small">Нет предстоящих записей с неоплаченным остатком. Укажите стоимость в записи, чтобы она попала в прогноз.</p>');
+}
+(function(){
+  const _fin=RENDERERS.finance;
+  RENDERERS.finance=function(){
+    try{ normalizeData(); _fin.apply(this,arguments); }
+    catch(err){
+      console.error(err);
+      $('#content').innerHTML=`<div class="cl-card"><div class="cl-lbl">Ошибка раздела «Финансы»</div><p class="small">${esc((err&&err.message)||String(err))}</p><p class="small dim">${esc(String((err&&err.stack)||'').split('\n').slice(0,3).join(' | '))}</p><p class="small dim">Пришлите этот текст — по нему можно найти причину.</p></div>`;
+    }
+  };
+})();
+function setFinPeriod(p){ financePeriod=p; RENDERERS.finance(); }
+function openFinanceForm(){
+  openModal(`<div class="modal-header"><h3>Финансовая операция</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <form id="finForm">
+  <label>Тип</label><select name="type" id="finType"><option value="income">Доход</option><option value="expense">Расход</option></select>
+  <label>Категория</label><select name="category" id="finCategory"></select>
