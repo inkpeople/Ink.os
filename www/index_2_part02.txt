@@ -1,0 +1,800 @@
+  $('#modalOverlay').classList.remove('open','client-open'); $('#modalBody').classList.remove('client-screen'); $('#modalBody').innerHTML='';
+  if(was) $$('#bottomnav .navbtn').forEach(el=>el.classList.toggle('active',el.dataset.route===currentRoute));
+}
+$('#modalOverlay').addEventListener('click',e=>{ if(e.target.id==='modalOverlay') closeModal(); });
+function confirmDialog(msg,onYes){
+  openModal(`<div class="modal-header"><h3>Подтверждение</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <p>${esc(msg)}</p>
+  <div class="row" style="margin-top:14px"><button class="btn" onclick="closeModal()">Отмена</button>
+  <button class="btn btn-danger" id="confirmYesBtn">Подтвердить</button></div>`);
+  $('#confirmYesBtn').onclick=()=>{ closeModal(); onYes(); };
+}
+
+/* ====================== GLOBAL DOUBLE-SUBMIT GUARD ======================
+   Rapid double-tap on a submit button (common on touch devices, especially
+   with any perceived lag) used to create duplicate records, since none of
+   the ~18 forms in this app had their own submit lock. Fixed once, globally,
+   on the capture phase — runs before the form's own onsubmit handler. */
+document.addEventListener('submit', function(e){
+  const f=e.target;
+  if(!(f instanceof HTMLFormElement)) return;
+  const now=Date.now();
+  if(f._lastSubmitAt && now-f._lastSubmitAt<1000){
+    e.preventDefault(); e.stopImmediatePropagation();
+    return;
+  }
+  f._lastSubmitAt=now;
+}, true);
+
+/* ====================== UNDO-DELETE ("КОРЗИНА") ====================== */
+// Shows a toast with an "Отменить" button. Item stays in IndexedDB for `duration` ms
+// (removed only from the in-memory list + UI), so undo is instant and lossless.
+function showUndoToast(msg,onUndo,duration){
+  duration=duration||5000;
+  const w=$('#toastWrap');
+  const el=document.createElement('div');
+  el.className='toast'; el.style.display='flex'; el.style.alignItems='center'; el.style.gap='10px';
+  const span=document.createElement('span'); span.textContent=msg; span.style.flex='1';
+  const btn=document.createElement('button'); btn.textContent='Отменить'; btn.className='btn btn-sm btn-primary'; btn.style.flexShrink='0';
+  el.appendChild(span); el.appendChild(btn); w.appendChild(el);
+  let done=false;
+  const timer=setTimeout(()=>{ if(!done){ done=true; el.style.opacity='0'; el.style.transition='opacity .4s'; setTimeout(()=>el.remove(),400); } },duration);
+  btn.onclick=()=>{ if(done) return; done=true; clearTimeout(timer); el.remove(); onUndo&&onUndo(); };
+}
+// opts: {store, listKey, id, message, onChange, auditEntity, auditLabel}
+function trashDelete(opts){
+  const list=S[opts.listKey];
+  const idx=list.findIndex(x=>x.id===opts.id);
+  if(idx<0) return;
+  const item=list[idx];
+  list.splice(idx,1);
+  if(opts.onChange) opts.onChange();
+  let undone=false;
+  const timer=setTimeout(async()=>{
+    if(!undone){
+      await idbDel(opts.store,opts.id);
+      if(opts.auditEntity) logAudit('delete',opts.auditEntity,opts.auditLabel||'',`Удалено окончательно`);
+    }
+  },5000);
+  showUndoToast(opts.message||'Удалено.',()=>{
+    undone=true; clearTimeout(timer);
+    list.splice(idx,0,item);
+    if(opts.onChange) opts.onChange();
+    toast('Восстановлено');
+  });
+}
+
+/* ====================== AUDIT LOG (история изменений) ====================== */
+function logAudit(action,entity,entityLabel,detail){
+  const rec={id:uid(),action,entity,entityLabel:entityLabel||'',detail:detail||'',ts:Date.now()};
+  idbPut('auditLog',rec);
+  S.auditLog.unshift(rec);
+}
+function openAuditLogSheet(){
+  const ACTION_LABEL={edit:'Изменено',delete:'Удалено',create:'Создано'};
+  const entries=(S.auditLog||[]).slice().sort((a,b)=>b.ts-a.ts).slice(0,150);
+  openSheet('История изменений', entries.length? `
+    <p class="small dim" style="margin-bottom:8px">Последние ${entries.length} записей. Фиксируются изменения статусов, оплат и удаления записей.</p>
+    ${entries.map(r=>`<div class="small" style="padding:7px 0;border-bottom:1px dashed var(--line)">
+      <div><b>${ACTION_LABEL[r.action]||r.action}</b> · ${esc(r.entity)}${r.entityLabel?(' · '+esc(r.entityLabel)):''}</div>
+      ${r.detail?`<div class="dim">${esc(r.detail)}</div>`:''}
+      <div class="dim" style="font-size:10px;margin-top:2px">${fmtDateTime(r.ts)}</div>
+    </div>`).join('')}
+  ` : '<p class="dim">Изменений пока не зафиксировано.</p>');
+}
+
+/* openDrawer/closeDrawer are aliases of the app's existing openSheet/closeSheet bottom-sheet system (defined further below), kept for readability. */
+function openDrawer(title,bodyHtml){ openSheet(title,bodyHtml); }
+function closeDrawer(){ closeSheet(); }
+
+/* ====================== MINI CANVAS CHARTS (no external libs) ====================== */
+function drawBarChart(canvas,series,opts){
+  opts=opts||{};
+  const ctx=canvas.getContext('2d');
+  const w=canvas.width=canvas.clientWidth||300, h=canvas.height=opts.height||180;
+  ctx.clearRect(0,0,w,h);
+  const pad=28;
+  const max=Math.max(1,...series.map(s=>s.value));
+  const barW=(w-pad*2)/series.length;
+  ctx.strokeStyle='#2a2523'; ctx.beginPath(); ctx.moveTo(pad,h-24); ctx.lineTo(w-6,h-24); ctx.stroke();
+  series.forEach((s,i)=>{
+    const bh=(h-50)*(s.value/max);
+    const x=pad+i*barW+barW*0.15, y=h-24-bh, bw=barW*0.7;
+    ctx.fillStyle=s.color||'#c62b28';
+    ctx.fillRect(x,y,bw,bh);
+    ctx.fillStyle='#a89e98'; ctx.font='10px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(s.label,x+bw/2,h-10);
+    ctx.fillStyle='#eee8e4'; ctx.fillText(String(s.value),x+bw/2,y-4>10?y-4:10);
+  });
+}
+function drawLineChart(canvas,points,opts){
+  opts=opts||{};
+  const ctx=canvas.getContext('2d');
+  const dpr=window.devicePixelRatio||1;
+  const w=canvas.clientWidth||300, h=opts.height||180;
+  canvas.width=w*dpr; canvas.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  if(!points.length) return;
+  const padL=42,padR=10,padT=14,padB=22;
+  const max=Math.max(1,...points.map(p=>p.value));
+  const min=Math.min(0,...points.map(p=>p.value));
+  const plotW=w-padL-padR, plotH=h-padT-padB;
+  // gridlines + y labels
+  ctx.strokeStyle='#241c1c'; ctx.fillStyle='#6f655f'; ctx.font='9px sans-serif'; ctx.textAlign='right';
+  const steps=4;
+  for(let i=0;i<=steps;i++){
+    const val=min+(max-min)*i/steps;
+    const y=padT+plotH-(plotH*i/steps);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+    ctx.fillText(Math.round(val).toLocaleString('ru-RU'),padL-6,y+3);
+  }
+  const stepX=points.length>1?plotW/(points.length-1):0;
+  const xy=points.map((p,i)=>({x:padL+i*stepX,y:padT+plotH-(max===min?0:plotH*(p.value-min)/(max-min))}));
+  // filled area
+  const grad=ctx.createLinearGradient(0,padT,0,padT+plotH);
+  grad.addColorStop(0,'rgba(198,43,40,.35)'); grad.addColorStop(1,'rgba(198,43,40,0)');
+  ctx.beginPath(); ctx.moveTo(xy[0].x,padT+plotH);
+  xy.forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.lineTo(xy[xy.length-1].x,padT+plotH); ctx.closePath();
+  ctx.fillStyle=grad; ctx.fill();
+  // line
+  ctx.beginPath(); ctx.moveTo(xy[0].x,xy[0].y);
+  xy.forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.strokeStyle='#e5453f'; ctx.lineWidth=2; ctx.shadowColor='rgba(198,43,40,.6)'; ctx.shadowBlur=6; ctx.stroke(); ctx.shadowBlur=0;
+  // dots
+  ctx.fillStyle='#e5453f';
+  xy.forEach(p=>{ ctx.beginPath(); ctx.arc(p.x,p.y,2.6,0,7); ctx.fill(); });
+  // x labels (skip some if crowded)
+  ctx.fillStyle='#6f655f'; ctx.textAlign='center'; ctx.font='9px sans-serif';
+  const labelEvery=Math.max(1,Math.ceil(points.length/6));
+  points.forEach((p,i)=>{ if(i%labelEvery===0||i===points.length-1) ctx.fillText(p.label,padL+i*stepX,h-6); });
+}
+
+/* ====================== INDEXEDDB LAYER ====================== */
+function idbOpen(){
+  return new Promise((resolve,reject)=>{
+    if(!('indexedDB' in window)){ reject('no-idb'); return; }
+    const req=indexedDB.open(DB_NAME,DB_VER);
+    req.onupgradeneeded=e=>{
+      const d=e.target.result;
+      STORES.forEach(name=>{
+        if(!d.objectStoreNames.contains(name)){
+          const store=d.createObjectStore(name,{keyPath:'id'});
+          if(name!=='settings') store.createIndex('byUpdated','updatedAt',{unique:false});
+        }
+      });
+    };
+    req.onsuccess=e=>resolve(e.target.result);
+    req.onerror=e=>reject(e);
+  });
+}
+function idbAll(store){
+  return new Promise((resolve,reject)=>{
+    if(!db){ resolve(S[store]||[]); return; }
+    const tx=db.transaction(store,'readonly');
+    const req=tx.objectStore(store).getAll();
+    req.onsuccess=()=>resolve(req.result||[]);
+    req.onerror=()=>reject(req.error);
+  });
+}
+function idbPut(store,obj){
+  obj.updatedAt=Date.now();
+  if(!obj.id) obj.id=uid();
+  return new Promise((resolve,reject)=>{
+    if(!db){ // localStorage fallback
+      const arr=S[store]||[]; const i=arr.findIndex(x=>x.id===obj.id);
+      if(i>=0) arr[i]=obj; else arr.push(obj);
+      S[store]=arr; persistLocalFallback();
+      resolve(obj); return;
+    }
+    const tx=db.transaction(store,'readwrite');
+    tx.objectStore(store).put(obj);
+    tx.oncomplete=()=>resolve(obj);
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+function idbDel(store,id){
+  return new Promise((resolve,reject)=>{
+    if(!db){ S[store]=(S[store]||[]).filter(x=>x.id!==id); persistLocalFallback(); resolve(); return; }
+    const tx=db.transaction(store,'readwrite');
+    tx.objectStore(store).delete(id);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+function persistLocalFallback(){
+  try{ localStorage.setItem('inkos_fallback_db',JSON.stringify(S)); }catch(e){}
+}
+function loadLocalFallback(){
+  try{ const raw=localStorage.getItem('inkos_fallback_db'); if(raw) Object.assign(S,JSON.parse(raw)); }catch(e){}
+}
+async function loadAllData(){
+  if(db){
+    for(const store of STORES){
+      if(store==='settings'){
+        const all=await idbAll('settings');
+        S.settings = all.length? all[0] : {id:'main',...defaultSettings()};
+      } else {
+        S[store]=await idbAll(store);
+      }
+    }
+  } else {
+    loadLocalFallback();
+    if(!S.settings || !S.settings.id) S.settings={id:'main',...defaultSettings()};
+  }
+  try{ normalizeData(); }catch(e){ console.error(e); }
+}
+function normalizeData(){
+  const isoDate=v=>{
+    if(v==null||v==='') return '';
+    if(typeof v==='number'&&isFinite(v)){ const d=new Date(v); return isNaN(d)?'':d.toISOString().slice(0,10); }
+    if(v instanceof Date) return isNaN(v)?'':v.toISOString().slice(0,10);
+    const t=String(v).trim(), m=t.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return m[1]+'-'+m[2]+'-'+m[3];
+    const r=t.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/); if(r) return r[3]+'-'+r[2].padStart(2,'0')+'-'+r[1].padStart(2,'0');
+    const d=new Date(t); return isNaN(d)?'':d.toISOString().slice(0,10);
+  };
+  const num=v=>{ if(typeof v==='number') return isFinite(v)?v:0; if(v==null||v==='') return 0; const n=parseFloat(String(v).replace(/[\s\u00a0]/g,'').replace(',','.')); return isFinite(n)?n:0; };
+  ['clients','events','payments','finance','tattooWork','projects','students','inventory'].forEach(k=>{
+    if(!Array.isArray(S[k])) S[k]=[];
+    S[k]=S[k].filter(x=>x&&typeof x==='object');
+  });
+  S.finance.forEach(f=>{ f.date=isoDate(f.date); f.amount=num(f.amount); if(f.type!=='income'&&f.type!=='expense') f.type=(f.type==='доход'?'income':(f.type==='расход'?'expense':f.type)); });
+  S.payments.forEach(p=>{ p.date=isoDate(p.date); p.amount=num(p.amount); });
+  S.events.forEach(e=>{ e.date=isoDate(e.date); if(e.cost!=null&&e.cost!=='') e.cost=num(e.cost); if(e.bookingAmount!=null&&e.bookingAmount!=='') e.bookingAmount=num(e.bookingAmount); if(e.start!=null&&typeof e.start!=='string') e.start=String(e.start); if(e.end!=null&&typeof e.end!=='string') e.end=String(e.end); });
+  S.clients.forEach(c=>{ if(c.firstVisit!=null) c.firstVisit=isoDate(c.firstVisit); });
+}
+function defaultSettings(){
+  return {thresholds:{...DEFAULT_THRESHOLDS},logo:null,logoDark:null,pin:null,splash:'full',theme:'street',workHoursStart:10,workHoursEnd:20,leadTimeDays:7,reserve:3,currency:'₽'};
+}
+async function saveSettings(){ S.settings.id='main'; await idbPut('settings',S.settings); }
+
+/* ====================== NOTIFICATIONS ENGINE ====================== */
+function addNotification(text,kind,refId,extra){
+  const n=Object.assign({id:uid(),text,kind:kind||'info',refId:refId||null,createdAt:Date.now(),read:false},extra||{});
+  S.notifications.unshift(n);
+  idbPut('notifications',n);
+  if(kind!=='tip'){
+    if(isNative()){ if(!(refId&&_nativeRefs.has(refId))) nativeNow('INK.OS',text); }
+    else if(pushOn()){ const c=pushCfg(); if(!(refId&&c.sent[refId])) ntfyPublish('INK.OS',pushSafeText(n.kind,text)).catch(()=>sysNotify(text)); }
+    else sysNotify(text);
+  }
+  return n;
+}
+async function sysNotify(text){
+  if(!('Notification' in window)||Notification.permission!=='granted') return;
+  try{ const reg=navigator.serviceWorker&&await navigator.serviceWorker.getRegistration();
+    if(reg&&reg.showNotification){ await reg.showNotification('INK.OS',{body:text,icon:'icon-192.png',badge:'icon-192.png',tag:'ink-'+Date.now()}); return; } }catch(e){}
+  try{ new Notification('INK.OS',{body:text}); }catch(e){}
+}
+function requestNotifPermission(){
+  if('Notification' in window && Notification.permission==='default'){
+    Notification.requestPermission();
+  }
+}
+function computeAutoNotifications(){
+  const now=Date.now();
+  const existingRefs=new Set(S.notifications.map(n=>n.refId));
+  // post-session reminders (7/30/60 days) based on tattooWork/session events completed
+  S.events.filter(e=>e.type==='session' && e.status==='completed').forEach(ev=>{
+    const client=S.clients.find(c=>c.id===ev.clientId);
+    if(!client) return;
+    const d0=new Date(ev.date);
+    [[7,'week',`Прошла неделя после сеанса с ${client.name}. Напишите клиенту и узнайте, как проходит восстановление.`],
+     [30,'month',`Прошёл месяц после сеанса с ${client.name}. Узнайте, как выглядит татуировка, и предложите продолжение проекта.`],
+     [60,'2month',`Прошло два месяца после сеанса с ${client.name}. Предложите новую идею и попросите оставить отзыв.`]
+    ].forEach(([days,tag,text])=>{
+      const refId=ev.id+'-'+tag;
+      const due=new Date(d0.getTime()+days*86400000);
+      if(due.getTime()<=now && !existingRefs.has(refId)){
+        addNotification(text,'followup',refId);
+      }
+    });
+  });
+  // birthdays: warn 7 days ahead, and on the day itself, once per year
+  (S.clients||[]).forEach(c=>{
+    if(!c.birthDate) return;
+    const bd=new Date(c.birthDate); if(isNaN(bd.getTime())) return;
+    const year=new Date(now).getFullYear();
+    [0,7].forEach(daysAhead=>{
+      const target=new Date(year,bd.getMonth(),bd.getDate());
+      target.setDate(target.getDate()-daysAhead);
+      const refId=`bday-${c.id}-${year}-${daysAhead}`;
+      const diff=Math.abs(target.getTime()-now);
+      if(diff<86400000 && !existingRefs.has(refId)){
+        addNotification(daysAhead===0?`Сегодня день рождения у ${c.name}! 🎂`:`Через неделю день рождения у ${c.name}.`,'birthday',refId);
+      }
+    });
+  });
+  // homework overdue
+  S.homework.forEach(h=>{
+    if(h.deadline && h.status!=='Принято' && h.status!=='Отменено'){
+      if(new Date(h.deadline).getTime()<now && h.status!=='Просрочено'){
+        h.status='Просрочено'; idbPut('homework',h);
+        addNotification(`Домашнее задание просрочено: ${h.title||''} (${(S.students.find(s=>s.id===h.studentId)||{}).name||''})`,'homework','hwover-'+h.id);
+      }
+    }
+  });
+  // backup reminder: warn if there's meaningful data but no backup in the last 14 days
+  const hasData = (S.clients||[]).length>0 || (S.events||[]).length>0;
+  if(hasData){
+    const lastBackupTs = (S.backups||[]).reduce((max,b)=>{ const t=new Date(b.date).getTime(); return t>max?t:max; },0);
+    const daysSince = lastBackupTs? Math.floor((now-lastBackupTs)/86400000) : Infinity;
+    if(daysSince>=14){
+      const bucket = Number.isFinite(daysSince)? Math.floor(daysSince/7) : 'never';
+      const refId='backup-reminder-'+bucket;
+      if(!existingRefs.has(refId)){
+        addNotification(lastBackupTs? `Вы не делали резервную копию ${daysSince} дн. Рекомендуем сохранить копию в разделе «Данные».` : `Вы ещё ни разу не делали резервную копию данных. Рекомендуем сохранить копию в разделе «Данные».`,'backup',refId);
+      }
+    }
+  }
+  renderNotifCount();
+}
+function renderNotifCount(){
+  const unread=S.notifications.filter(n=>!n.read).length;
+  const b=$('#notifCount');
+  if(unread>0){ b.textContent=unread>99?'99+':unread; b.classList.remove('hidden'); } else { b.classList.add('hidden'); }
+}
+
+/* ====================== ICONS (inline geometric SVG, 1.6px stroke) ====================== */
+const ICONS={
+  home:'<path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/>',
+  consents:'<path d="M6 3.5h9l4 4v13h-13z"/><path d="M15 3.5v4h4"/><path d="M8 12.5l6.5 2.5" stroke-linecap="round"/>',
+  projects:'<rect x="3.5" y="7" width="12" height="14" rx="2"/><path d="M8 7V5a2 2 0 012-2h6a2 2 0 012 2v11a2 2 0 01-2 2h-1.5"/><path d="M7 12h6M7 15.5h6"/>',
+  calendar:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17"/><path d="M8 3v3M16 3v3"/><circle cx="12" cy="14.5" r="1.4" fill="currentColor" stroke="none"/>',
+  clients:'<circle cx="9" cy="8" r="3"/><path d="M4 20c0-3.3 2.5-5.5 5-5.5s5 2.2 5 5.5"/><circle cx="16.5" cy="9" r="2.3"/><path d="M15 14.5c2 .2 4 1.8 4 5"/>',
+  finance:'<path d="M4 16l4-5 3.5 3 5-6.5L20 10"/><path d="M4 20h16"/>',
+  burger:'<path d="M4 7h13"/><path d="M4 12h16"/><path d="M4 17h13"/>',
+  training:'<path d="M12 4 3 8l9 4 9-4-9-4Z"/><path d="M7 10.5V15c0 1.5 2.2 3 5 3s5-1.5 5-3v-4.5"/>',
+  inventory:'<path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z"/><path d="M4 7.5 12 12l8-4.5"/><path d="M12 12v9"/>',
+  guestspot:'<circle cx="12" cy="9" r="3"/><rect x="6" y="14" width="12" height="7" rx="2"/><path d="M9.5 17.5h5"/>',
+  cities:'<path d="M12 21s-6-5.2-6-10a6 6 0 1 1 12 0c0 4.8-6 10-6 10Z"/><circle cx="12" cy="11" r="2"/>',
+  photos:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7l1.5-2.5h5L16 7"/><circle cx="12" cy="13.5" r="3.4"/>',
+  reports:'<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  data:'<ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6"/><path d="M5 11.5v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6"/>',
+  help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.5 2.5 0 1 1 3.7 2.2c-.9.5-1.2 1-1.2 2"/><circle cx="12" cy="16.7" r="0.9" fill="currentColor" stroke="none"/>',
+  settings:'<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2.3M12 19.2v2.3M21.5 12h-2.3M4.8 12H2.5M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2 5.6 5.6"/>',
+  edit:'<path d="M4 20l.9-3.6L16.4 5 19 7.6 7.6 19.1 4 20Z"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  dots:'<circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/>',
+  message:'<rect x="3.5" y="4.5" width="17" height="13" rx="3"/><path d="M9 21l3-3.5"/><path d="M8 10h.01M12 10h.01M16 10h.01" stroke-width="2.4"/>',
+  chevron:'<path d="M9 6l6 6-6 6"/>',
+  close:'<path d="M6 6l12 12M18 6L6 18"/>',
+  camera:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7l1.5-2.5h5L16 7"/><circle cx="12" cy="13.5" r="3.4"/>',
+  chart:'<path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/>',
+  minus:'<path d="M5 12h14"/>',
+  coin:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v9M9.5 9.5h3.2a1.8 1.8 0 010 3.6H9.8a1.8 1.8 0 000 3.6h3.7"/>',
+  clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.3 2"/>',
+  clientAdd:'<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.6-5.5 6-5.5s6 2.2 6 5.5"/><path d="M18 8v5M15.5 10.5h5"/>',
+  repeat:'<path d="M17 2l4 4-4 4"/><path d="M21 6H8a5 5 0 00-5 5"/><path d="M7 22l-4-4 4-4"/><path d="M3 18h13a5 5 0 005-5"/>',
+  phone:'<path d="M6.5 3.5 9 6l-1.3 2.6a12 12 0 0 0 7.7 7.7L18 15l2.5 2.5c.4.4.5 1 .2 1.5-1 1.6-2.9 2.5-4.7 2-5.7-1.5-10-5.8-11.5-11.5-.5-1.8.4-3.7 2-4.7.5-.3 1.1-.2 1.5.2Z"/>',
+  vk:'<path d="M4 4.5c.2 8 4.3 12.8 11 13h.9v-3c2.6.3 4.6-.6 5.4-2.2M4 4.5h3c.2 4 2 6.6 3 6.9V4.5h3v4.2c1-.2 2.7-2 3.3-4.2h3c-.5 2.6-2.3 4.5-3.6 5.3 1.3.6 3.3 2.3 4.1 4.7h-3.2c-.6-2-2.2-3.6-4.6-3.8v3.8h-.4C7.6 14.5 4.3 10 4 4.5Z"/>',
+  telegram:'<path d="M20.5 4 3 11l5 1.8M20.5 4 17 19.5l-6.8-5M20.5 4 8 13.3v5.4l2.2-2.7"/>',
+  instagram:'<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1" fill="currentColor" stroke="none"/>',
+  max:'<circle cx="11.2" cy="10.3" r="6.2" stroke-width="3"/><path d="M15 14.7l3.6 4" stroke-width="3" stroke-linecap="round"/>'
+};
+function icon(name,cls){ return `<svg class="ico ${cls||''}" viewBox="0 0 24 24">${ICONS[name]||''}</svg>`; }
+
+/* ====================== NAVIGATION (2-level: bottom tabs + "More" sheet) ====================== */
+const NAV=[
+  {id:'dashboard',label:'Главная',icon:'home'},
+  {id:'calendar',label:'Календарь',icon:'calendar'},
+  {id:'clients',label:'Клиенты',icon:'clients'},
+  {id:'projects',label:'Проекты',icon:'projects'},
+  {id:'finance',label:'Финансы',icon:'finance'},
+  {id:'training',label:'Менторство',icon:'training'},
+  {id:'inventory',label:'Склад',icon:'inventory'},
+  {id:'guestspot',label:'Guest Spot',icon:'guestspot'},
+  {id:'cities',label:'Города',icon:'cities'},
+  {id:'photos',label:'Фото',icon:'photos'},
+  {id:'consents',label:'Анкеты',icon:'consents'},
+  {id:'calculator',label:'Калькулятор цены',icon:'finance'},
+  {id:'analytics',label:'Аналитика и налоги',icon:'chart'},
+  {id:'reports',label:'Отчёты',icon:'reports'},
+  {id:'data',label:'Данные',icon:'data'},
+  {id:'help',label:'Справка',icon:'help'},
+  {id:'settings',label:'Настройки',icon:'settings'}
+];
+const PRIMARY_MOBILE=['dashboard','calendar','clients','finance'];
+function navBadge(id){
+  if(id==='training') return S.homework.some(h=>h.status==='На проверке'||h.status==='Просрочено');
+  if(id==='inventory') return S.inventory.some(i=>i.qty<=i.threshold);
+  if(id==='guestspot') return S.guestSpots.some(g=>!g.closed);
+  return false;
+}
+function buildNav(){
+  const sb=$('#sidebar');
+  sb.innerHTML=NAV.map(n=>`<div class="nav-item" data-route="${n.id}">${icon(n.icon)}<span>${n.label}</span></div>`).join('');
+  sb.querySelectorAll('.nav-item').forEach(el=>el.onclick=()=>go(el.dataset.route));
+  const bn=$('#bottomnav');
+  const items=NAV.filter(n=>PRIMARY_MOBILE.includes(n.id));
+  bn.innerHTML=items.map(n=>`<div class="navbtn" data-route="${n.id}">${icon(n.icon)}${navBadge(n.id)?'<span class="nbadge"></span>':''}<span class="nlabel">${n.label}</span></div>`).join('')+
+    `<div class="navbtn" id="moreNavBtn">${icon('burger')}<span class="nlabel">Ещё</span></div>`;
+  bn.querySelectorAll('.navbtn[data-route]').forEach(el=>el.onclick=()=>go(el.dataset.route));
+  $('#moreNavBtn').onclick=openMoreSheet;
+}
+function openMoreSheet(){
+  const rest=NAV.filter(n=>!PRIMARY_MOBILE.includes(n.id)&&n.id!=='dashboard');
+  $('#moreSheetInner').innerHTML=`<div class="sheet-handle"></div><div class="row" style="margin-bottom:6px"><h3 style="margin:0">Ещё</h3><button class="btn btn-icon btn-sm" onclick="closeMoreSheet()">${icon('close')}</button></div>`+
+    rest.map(n=>`<div class="sheet-item" data-route="${n.id}">${icon(n.icon,'')}<span>${n.label}</span>${navBadge(n.id)?'<span class="nbadge"></span>':''}</div>`).join('');
+  $('#moreSheetInner').querySelectorAll('.sheet-item').forEach(el=>el.onclick=()=>{ closeMoreSheet(); go(el.dataset.route); });
+  $('#moreSheet').style.display='flex';
+}
+function closeMoreSheet(){ $('#moreSheet').style.display='none'; }
+$('#moreSheet').addEventListener('click',e=>{ if(e.target.id==='moreSheet') closeMoreSheet(); });
+
+/* ====================== GENERIC SHEET (now always centered, not bottom-anchored) ====================== */
+function openSheet(title,html,opts){
+  opts=opts||{};
+  const centered=opts.centered!==false;
+  $('#genericSheetBody').innerHTML=`${centered?'':'<div class="sheet-handle"></div>'}<div class="gsheet-header"><button class="sh-back" onclick="closeSheet()" aria-label="Назад">${icon('chevron')}</button><h3>${esc(title)}</h3></div><div>${html}</div>`;
+  $('#genericSheetOverlay').classList.toggle('centered',centered);
+  $('#genericSheetOverlay').classList.add('open');
+}
+function closeSheet(){ $('#genericSheetOverlay').classList.remove('open'); }
+$('#genericSheetOverlay').addEventListener('click',e=>{ if(e.target.id==='genericSheetOverlay') closeSheet(); });
+
+const RENDERERS={};
+function go(route){
+  if($('#modalOverlay').classList.contains('client-open')) closeModal();
+  currentRoute=route;
+  $$('#sidebar .nav-item').forEach(el=>el.classList.toggle('active',el.dataset.route===route));
+  $$('#bottomnav .navbtn').forEach(el=>el.classList.toggle('active',el.dataset.route===route));
+  {const nv=NAV.find(n=>n.id===route)||{}; $('#topbarSub').innerHTML=(nv.icon?icon(nv.icon):'')+(nv.label||''); $('#topbar').dataset.route=route;}
+  $('#tipsBtn').classList.toggle('hidden', route!=='dashboard');
+  const fn=RENDERERS[route];
+  $('#content').innerHTML = fn ? '' : '<p class="dim">Раздел в разработке.</p>';
+  if(fn) fn();
+  window.scrollTo(0,0);
+  $('#content').scrollTop=0;
+}
+function renderTipsBadge(){
+  const n=(window._dash&&window._dash.tips)?window._dash.tips.length:0;
+  const b=$('#tipsCount');
+  if(n>0){ b.textContent=n; b.classList.remove('hidden'); } else { b.classList.add('hidden'); }
+}
+$('#tipsBtn').onclick=()=>openDashSheet('tips');
+
+/* ====================== SPLASH SCREEN (INK.OS animation) ====================== */
+function runSplash(){
+  const st=S.settings||{};
+  if(st.splash==='off'){ finishSplash(); return; }
+  const sp=$('#splash'), short=st.splash==='short';
+  sp.classList.toggle('short',short);
+  requestAnimationFrame(()=>sp.classList.add('play'));
+  setTimeout(finishSplash, short?2900:5600);
+}
+function finishSplash(){
+  if(finishSplash._done) return;
+  finishSplash._done=true;
+  const sp=$('#splash');
+  sp.style.opacity='0';
+  setTimeout(()=>{ sp.style.display='none'; afterSplash(); },600);
+}
+$('#skipSplash').onclick=finishSplash;
+
+/* ====================== PIN LOCK ====================== */
+let pinBuffer='';
+function afterSplash(){
+  if(S.settings.pin){
+    showPinScreen('unlock');
+  } else {
+    bootApp();
+  }
+}
+function showPinScreen(mode){
+  $('#pinScreen').classList.remove('hidden');
+  pinBuffer='';
+  $('#pinMsg').textContent = mode==='set' ? 'Придумайте PIN (4 цифры)' : (mode==='confirm'?'Повторите PIN':'Введите PIN');
+  renderPinDots();
+  const digits=[1,2,3,4,5,6,7,8,9,'',0,'⌫'];
+  $('#pinPad').innerHTML=digits.map(d=>`<button data-d="${d}" ${d===''?'style="visibility:hidden"':''}>${d}</button>`).join('');
+  $('#pinPad').querySelectorAll('button[data-d]').forEach(b=>{
+    b.onclick=()=>{
+      const d=b.dataset.d;
+      if(d==='⌫'){ pinBuffer=pinBuffer.slice(0,-1); renderPinDots(); return; }
+      if(pinBuffer.length<4){ pinBuffer+=d; renderPinDots(); }
+      if(pinBuffer.length===4) handlePinComplete(mode);
+    };
+  });
+}
+let pinFirstEntry=null;
+function handlePinComplete(mode){
+  if(mode==='unlock'){
+    if(pinBuffer===S.settings.pin){ hidePinScreen(); bootApp(); }
+    else { $('#pinMsg').textContent='Неверный PIN'; pinBuffer=''; renderPinDots(); }
+  } else if(mode==='set'){
+    pinFirstEntry=pinBuffer; showPinScreen('confirm');
+  } else if(mode==='confirm'){
+    if(pinBuffer===pinFirstEntry){ S.settings.pin=pinBuffer; saveSettings(); hidePinScreen(); toast('PIN установлен'); if(!appBooted) bootApp(); else go('settings'); }
+    else { toast('PIN не совпадает'); showPinScreen('set'); }
+  }
+}
+function renderPinDots(){
+  $('#pinDots').innerHTML=[0,1,2,3].map(i=>`<span class="${i<pinBuffer.length?'filled':''}"></span>`).join('');
+}
+function hidePinScreen(){ $('#pinScreen').classList.add('hidden'); }
+$('#lockBtn').onclick=()=>{ if(S.settings.pin){ showPinScreen('unlock'); } else { toast('PIN не установлен. Задайте его в Настройках.'); } };
+
+/* ====================== BOOT ====================== */
+let appBooted=false;
+async function bootApp(){
+  if(appBooted) return;
+  appBooted=true;
+  $('#app').classList.remove('hidden');
+  buildNav();
+  requestNotifPermission();
+  computeAutoNotifications();
+  renderNotifCount();
+  go('dashboard');
+  setInterval(()=>{ computeAutoNotifications(); }, 60000);
+  setupInactivityLock();
+}
+/* ====================== AUTO-LOCK AFTER INACTIVITY ====================== */
+let inactivityTimer=null;
+function resetInactivityTimer(){
+  if(inactivityTimer){ clearTimeout(inactivityTimer); inactivityTimer=null; }
+  const mins=Number(S.settings.autoLockMinutes||0);
+  if(!S.settings.pin || !mins) return;
+  inactivityTimer=setTimeout(()=>{
+    if(!$('#pinScreen').classList.contains('hidden')) return;
+    showPinScreen('unlock');
+  }, mins*60000);
+}
+function setupInactivityLock(){
+  ['click','touchstart','keydown','mousemove'].forEach(evt=>document.addEventListener(evt,resetInactivityTimer,{passive:true}));
+  resetInactivityTimer();
+}
+/* ====================== FINANCIAL DATA MASKING ====================== */
+function finVal(html){
+  return S.settings.hideFinance ? `<span title="Финансовые данные скрыты — включите показ в Настройках → Безопасность" style="letter-spacing:2px">••••••</span>` : html;
+}
+async function init(){
+  try{ db=await idbOpen(); }catch(e){ db=null; toast('IndexedDB недоступен — используется резервное хранилище localStorage.'); }
+  await loadAllData();
+  if(S.clients.length===0 && S.settings._seeded!==true){
+    // first run: offer demo data via prompt on dashboard; do not auto-seed silently more than once
+  }
+  runSplash();
+}
+init();
+
+/* ====================== BACKGROUND PATTERN (inline SVG skulls/graffiti, low opacity) ====================== */
+(function setBgPattern(){
+  const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><g fill='none' stroke='%23c62b28' stroke-width='2'>
+  <circle cx='40' cy='40' r='16'/><path d='M32 44 q8 10 16 0'/><circle cx='34' cy='36' r='3'/><circle cx='46' cy='36' r='3'/>
+  <path d='M120 130 l14 14 M134 130 l-14 14'/><path d='M100 150 q20 -18 40 0'/>
+  <path d='M10 120 l160 0' stroke-dasharray='4 6' opacity='.5'/>
+  </g></svg>`;
+  const url='data:image/svg+xml;utf8,'+encodeURIComponent(svg);
+  $('#bgPattern').style.backgroundImage=`url("${url}")`;
+})();
+
+/* ====================== DASHBOARD ====================== */
+RENDERERS.dashboard=function(){
+  const today=todayISO();
+  const todaysEvents=S.events.filter(e=>e.date===today).sort((a,b)=>(a.start||'').localeCompare(b.start||''));
+  const now=new Date();
+  const upcoming=S.events.filter(e=>new Date(e.date+'T'+(e.start||'00:00'))>now).sort((a,b)=>new Date(a.date+'T'+(a.start||'00:00'))-new Date(b.date+'T'+(b.start||'00:00')))[0];
+  const monthStr=today.slice(0,7);
+  const monthFinance=S.finance.filter(f=>f.date && f.date.slice(0,7)===monthStr);
+  const revenueMonth=monthFinance.filter(f=>f.type==='income').reduce((s,f)=>s+Number(f.amount||0),0);
+  const expenseMonth=monthFinance.filter(f=>f.type==='expense').reduce((s,f)=>s+Number(f.amount||0),0);
+  const revenueToday=S.finance.filter(f=>f.type==='income'&&f.date===today).reduce((s,f)=>s+Number(f.amount||0),0);
+  const expensesFilled = monthFinance.some(f=>f.type==='expense'); // heuristic
+  const profit=revenueMonth-expenseMonth;
+  const newClients=S.clients.filter(c=>c.firstVisit && c.firstVisit.slice(0,7)===monthStr).length;
+  const repeatClients=S.clients.filter(c=>(c.visits||0)>1).length;
+  const needContact=S.clients.filter(c=>c.status==='Давно не был'||c.status==='Ожидает ответа').slice(0,6);
+  const longAbsent=S.clients.filter(c=>c.lastVisit && daysBetween(c.lastVisit,today)>180).slice(0,6);
+  const birthdays=upcomingBirthdays(14);
+  const avgCheck = S.clients.length? (S.clients.reduce((s,c)=>s+Number(c.totalSum||0),0)/Math.max(1,S.clients.reduce((s,c)=>s+Number(c.visits||0),0))) : 0;
+  const studentsCount=S.students.length;
+  const trainingIncome=S.finance.filter(f=>f.category==='training').reduce((s,f)=>s+Number(f.amount||0),0);
+  const hwToReview=S.homework.filter(h=>h.status==='На проверке').length;
+  const hwOverdue=S.homework.filter(h=>h.status==='Просрочено').length;
+  const lowStock=S.inventory.filter(i=>i.category!=='equipment'&&i.qty<=i.threshold);
+  const cartridgeUsageAgg={};
+  S.cartridgeUsage.forEach(u=>{ const k=u.config; cartridgeUsageAgg[k]=(cartridgeUsageAgg[k]||0)+Number(u.qty||0); });
+  const topCartridges=Object.entries(cartridgeUsageAgg).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  const tasksOpen=S.tasks.filter(t=>!t.done);
+  const unreadNotif=S.notifications.filter(n=>!n.read);
+
+  // style popularity/income
+  const styleStats={};
+  S.tattooWork.forEach(w=>{ if(!w.style) return; styleStats[w.style]=styleStats[w.style]||{count:0,income:0}; styleStats[w.style].count++; const pay=S.payments.find(p=>p.eventId===w.eventId); styleStats[w.style].income+=pay?Number(pay.amount||0):0; });
+  const topStyleCount=Object.entries(styleStats).sort((a,b)=>b[1].count-a[1].count)[0];
+  const topStyleIncome=Object.entries(styleStats).sort((a,b)=>b[1].income-a[1].income)[0];
+
+  const tips=[];
+  if(topStyleCount) tips.push(`Популярный стиль: ${topStyleCount[0]} (${topStyleCount[1].count} работ).`);
+  if(topStyleIncome) tips.push(`Больше всего дохода приносит стиль: ${topStyleIncome[0]} (${fmtMoney(topStyleIncome[1].income)}).`);
+  if(lowStock.length) tips.push(`Заканчиваются материалы: ${lowStock.slice(0,4).map(i=>i.name).join(', ')}.`);
+  if(topCartridges[0]) tips.push(`Чаще всего используется картридж: ${topCartridges[0][0]} — закупайте его в приоритете.`);
+  if(needContact.length) tips.push(`Клиентов ждущих ответа: ${needContact.length} — стоит написать.`);
+  if(hwToReview) tips.push(`На проверке ${hwToReview} домашних заданий учеников.`);
+  if(profit<0) tips.push(`Расходы за месяц превышают доход — проверьте закупки.`);
+  if(!tips.length) tips.push('Данных пока недостаточно для рекомендаций — заполните события, платежи и склад.');
+
+  window._dash={todaysEvents,tips,needContact,longAbsent,today,birthdays};
+  const ownerName=S.settings.ownerName||'Мастер';
+  const clientsToday=new Set(todaysEvents.map(e=>e.clientId).filter(Boolean)).size;
+  const pl=(n,a,b,c)=>n+' '+((n%10===1&&n%100!==11)?a:([2,3,4].includes(n%10)&&![12,13,14].includes(n%100))?b:c);
+  const nowD=new Date(), hr=nowD.getHours();
+  const hello=hr<5?'Доброй ночи':hr<12?'Доброе утро':hr<18?'Добрый день':'Добрый вечер';
+  const dateLine=nowD.toLocaleDateString('ru-RU',{weekday:'long'})+' · '+nowD.toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
+  const workH=todaysEvents.filter(e=>e.status!=='cancelled').reduce((s,e)=>s+eventHours(e),0);
+  const wh=Math.floor(workH), wm=Math.round((workH-wh)*60);
+  const unconfirmed=S.events.filter(e=>e.type==='session'&&e.date>=today&&!['cancelled','completed','noshow'].includes(e.status)&&!(e.checklistPre&&e.checklistPre[0])).length;
+  const returnN=new Set([...needContact,...longAbsent].map(c=>c.id)).size;
+  const tmr=(()=>{const d=new Date();d.setDate(d.getDate()+1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+  const tmrN=S.events.filter(e=>e.clientId&&e.date===tmr&&!['cancelled','completed','noshow'].includes(e.status)).length;
+  const todo=[
+    [tmrN,'Завтра '+pl(tmrN,'клиент','клиента','клиентов')+' — напомнить',"go('calendar')"],
+    [unconfirmed,pl(unconfirmed,'запись','записи','записей')+' без подтверждения',"go('calendar')"],
+    [returnN,pl(returnN,'клиент','клиента','клиентов')+' пора вернуть',"openDashSheet('contact')"],
+    [lowStock.length,pl(lowStock.length,'материал заканчивается','материала заканчиваются','материалов заканчиваются'),"go('inventory')"],
+    [birthdays.length,pl(birthdays.length,'день рождения','дня рождения','дней рождения'),"openDashSheet('birthdays')"],
+    [tasksOpen.length,pl(tasksOpen.length,'открытая задача','открытые задачи','открытых задач'),"openDashSheet('more')"]
+  ].filter(t=>t[0]>0);
+  const upH=upcoming?eventHours(upcoming):0;
+  const upCard=upcoming?`<div class="up-card" onclick="openDaySummary('${upcoming.date}')"><span class="up-ic" style="--c:${EVENT_TYPES[upcoming.type]?.color||'#8E44AD'}">${icon('clock')}</span><div class="up-time">${upcoming.start||''}<small>${upcoming.date===today?'сегодня':fmtDate(upcoming.date)}</small></div><div class="up-body"><b>${esc(clientOrLabel(upcoming))}</b><div class="dim small">${esc(upcoming.zone||EVENT_TYPES[upcoming.type]?.label||'')}${upH?' · '+(+upH.toFixed(1))+' ч':''}</div></div>${icon('chevron')}</div>`:'<div class="card dim small">Ближайших событий нет</div>';
+  $('#content').innerHTML=`
+  <div class="dash-head"><h2>${hello}, ${esc(S.settings.ownerName||'Роман')}</h2><div class="dh-date">${dateLine}</div></div>
+  <div class="today-card2" onclick="openDashSheet('today')">
+    <div class="sec-label" style="margin:0">Сегодня</div>
+    <div class="tc-row"><span>${icon('calendar')}<b>${pl(todaysEvents.length,'запись','записи','записей')}</b></span><span>${icon('clients')}<b>${pl(clientsToday,'клиент','клиента','клиентов')}</b></span></div>
+    <div class="tc-row">${icon('clock')}<b>${wh} ч ${wm} мин работы</b></div>
+  </div>
+  ${goalCardHtml()}
+  <div class="sec-label">Быстрые действия</div>
+  <div class="qa-grid">
+    <button class="qa-btn" onclick="openEventForm(null,{type:'session'})">${icon('plus','ic')}Запись</button>
+    <button class="qa-btn" onclick="openClientForm()">${icon('plus','ic')}Клиент</button>
+    <button class="qa-btn" onclick="openFinanceForm()">${icon('plus','ic')}Расход</button>
+    <button class="qa-btn" onclick="go('photos')">${icon('camera','ic')}Фото</button>
+  </div>
+  ${S.clients.length===0 && S.events.length===0 ? `<div class="card card-red" style="margin-bottom:14px"><div class="row"><div><b>Похоже, это первый запуск.</b><div class="dim small">Загрузите демонстрационные данные, чтобы посмотреть, как работает приложение.</div></div><button class="btn btn-primary" onclick="seedDemoData()">Загрузить демо-данные</button></div></div>` : ''}
+  <div class="sec-label">Нужно сделать</div>
+  <div class="todo-list2">${todo.length?todo.map(t=>`<div class="todo-row" onclick="${t[2]}"><span class="dot"></span><span class="t">${t[1]}</span>${icon('chevron')}</div>`).join(''):'<div class="card dim small">Всё сделано</div>'}</div>
+  <div class="sec-label">Ближайшее событие</div>
+  ${upCard}
+  <button class="action-card" style="margin-top:14px" onclick="openDashSheet('more')"><span>Ещё статистика</span><span>${icon('chevron')}</span></button>`;
+  window._dashExtra={avgCheck,trainingIncome,hwToReview,tasksOpen};
+  renderTipsBadge();
+};
+function openDashSheet(kind){
+  const d=window._dash, ex=window._dashExtra;
+  if(kind==='today'){
+    openSheet('Записи сегодня', d.todaysEvents.length? d.todaysEvents.map(e=>`<div class="row" style="padding:8px 0;border-bottom:1px dashed var(--line)"><span>${e.start||''} · ${EVENT_TYPES[e.type]?.label||e.type} ${e.clientId?('· '+ (clientName(e.clientId))):''}</span><span class="evt-dot" style="background:${EVENT_TYPES[e.type]?.color}"></span></div>`).join('')+`<button class="btn btn-sm" style="margin-top:10px" onclick="closeSheet();go('calendar')">Открыть календарь</button>` : '<p class="dim">Сегодня записей нет.</p><button class="btn btn-sm" onclick="closeSheet();go(\'calendar\')">Открыть календарь</button>');
+  } else if(kind==='tips'){
+    openSheet('Советы владельцу', d.tips.map(t=>`<div class="small" style="padding:8px 0;border-bottom:1px dashed var(--line)">💡 ${esc(t)}</div>`).join(''));
+  } else if(kind==='contact'){
+    openSheet('Написать клиентам', d.needContact.length? `
+      ${d.needContact.length>1?`<button class="btn btn-sm btn-primary" style="margin-bottom:8px" onclick="openBulkMessageSheet(window._dash.needContact)">✉️ Написать всем сразу</button>`:''}
+      ${d.needContact.map(c=>`<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line)"><span>${esc(c.name)} <span class="badge badge-wait">${esc(c.status)}</span></span><button class="btn btn-sm" onclick="closeSheet();openClient('${c.id}')">Открыть</button></div>`).join('')}
+    ` : '<p class="dim">Нет клиентов, требующих контакта.</p>');
+  } else if(kind==='absent'){
+    openSheet('Давно не посещали студию', d.longAbsent.length? `
+      ${d.longAbsent.length>1?`<button class="btn btn-sm btn-primary" style="margin-bottom:8px" onclick="openBulkMessageSheet(window._dash.longAbsent)">✉️ Написать всем сразу</button>`:''}
+      ${d.longAbsent.map(c=>`<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line)"><span>${esc(c.name)} · ${daysBetween(c.lastVisit,d.today)} дн.</span><button class="btn btn-sm" onclick="closeSheet();openClient('${c.id}')">Открыть</button></div>`).join('')}
+    ` : '<p class="dim">Все клиенты активны.</p>');
+  } else if(kind==='birthdays'){
+    openSheet('Дни рождения', d.birthdays.length? d.birthdays.map(b=>`<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line)"><span>🎂 ${esc(b.client.name)} · ${b.diffDays===0?'сегодня!':b.diffDays===1?'завтра':'через '+b.diffDays+' дн.'}</span><button class="btn btn-sm" onclick="closeSheet();openClient('${b.client.id}')">Открыть</button></div>`).join('') : '<p class="dim">Ближайших дней рождения нет.</p>');
+  } else if(kind==='more'){
+    openSheet('Дополнительная статистика', `<div class="grid grid-2">
+      <div class="stat"><div class="num">${fmtMoney(ex.avgCheck)}</div><div class="lbl">Средний чек</div></div>
+      <div class="stat"><div class="num">${fmtMoney(ex.trainingIncome)}</div><div class="lbl">Доход от обучения</div></div>
+      <div class="stat"><div class="num">${ex.hwToReview}</div><div class="lbl">Заданий на проверку</div></div>
+      <div class="stat"><div class="num">${ex.tasksOpen.length}</div><div class="lbl">Открытых задач</div></div>
+    </div>`);
+  }
+}
+/* ====================== МАССОВАЯ РАССЫЛКА (WhatsApp, по одному клику на клиента) ====================== */
+function openBulkMessageSheet(clients){
+  clients=(clients||[]).filter(Boolean);
+  if(!clients.length){ toast('Нет клиентов для рассылки'); return; }
+  const defaultText='Здравствуйте! Давно не виделись — хотели узнать, как ваши дела, и предложить записаться на новый сеанс 🙂';
+  openSheet('Массовая рассылка · '+clients.length+' чел.', `
+    <p class="small dim">Один текст для всех. Нажмите WhatsApp у каждого клиента — сообщение откроется уже с текстом, останется нажать «Отправить».</p>
+    <textarea id="bulkMsgText" rows="3">${esc(defaultText)}</textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="btn btn-sm" id="bulkCopyBtn">Скопировать текст</button>
+      <span class="small dim" id="bulkNoPhoneNote"></span>
+    </div>
+    <div id="bulkMsgList" style="margin-top:10px"></div>
+  `);
+  function renderList(){
+    const text=$('#bulkMsgText').value;
+    let noPhone=0;
+    $('#bulkMsgList').innerHTML = clients.map(c=>{
+      const digits=(c.whatsapp||c.phone||'').replace(/[^0-9]/g,'');
+      const link = digits? `https://wa.me/${digits}?text=${encodeURIComponent(text)}` : '';
+      if(!digits) noPhone++;
+      return `<div class="row small" style="padding:7px 0;border-bottom:1px dashed var(--line)">
+        <span>${esc(c.name)}</span>
+        ${link?`<a class="btn btn-sm btn-primary" href="${link}" target="_blank" rel="noopener">WhatsApp</a>`:'<span class="dim">Нет номера</span>'}
+      </div>`;
+    }).join('');
+    $('#bulkNoPhoneNote').textContent = noPhone? `Без номера: ${noPhone}` : '';
+  }
+  $('#bulkMsgText').oninput=renderList;
+  $('#bulkCopyBtn').onclick=()=>{ navigator.clipboard?.writeText($('#bulkMsgText').value).then(()=>toast('Текст скопирован')).catch(()=>toast('Не удалось скопировать')); };
+  renderList();
+}
+function clientName(id){ const c=S.clients.find(x=>x.id===id); return c?c.name:'—'; }
+function upcomingBirthdays(daysAhead){
+  daysAhead=daysAhead==null?14:daysAhead;
+  const now=new Date(); now.setHours(0,0,0,0);
+  const list=[];
+  (S.clients||[]).forEach(c=>{
+    if(!c.birthDate) return;
+    const bd=new Date(c.birthDate); if(isNaN(bd.getTime())) return;
+    const next=new Date(now.getFullYear(),bd.getMonth(),bd.getDate());
+    if(next<now) next.setFullYear(now.getFullYear()+1);
+    const diffDays=Math.round((next-now)/86400000);
+    if(diffDays<=daysAhead) list.push({client:c,diffDays,date:next});
+  });
+  return list.sort((a,b)=>a.diffDays-b.diffDays);
+}
+
+/* ====================== CLIENTS ====================== */
+let clientFilter={q:'',status:'',sort:'name'};
+RENDERERS.clients=function(){
+  $('#content').innerHTML=`
+  <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
+    <h2 style="margin:0">Клиенты</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="exportCSV('clients')">Экспорт CSV</button>
+      <button class="btn btn-primary btn-sm" onclick="openClientForm()">+ Клиент</button>
+    </div>
+  </div>
+  <div class="field-row" style="margin-bottom:10px">
+    <div><input type="text" id="clSearch" placeholder="Поиск: имя, телефон, Instagram, город" value="${esc(clientFilter.q)}"></div>
+    <div><select id="clStatusFilter"><option value="">Все статусы</option>${CLIENT_STATUS.map(s=>`<option ${clientFilter.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+    <div><select id="clSort"><option value="name" ${clientFilter.sort==='name'?'selected':''}>По имени</option><option value="last" ${clientFilter.sort==='last'?'selected':''}>По последнему визиту</option><option value="sum" ${clientFilter.sort==='sum'?'selected':''}>По сумме</option><option value="visits" ${clientFilter.sort==='visits'?'selected':''}>По визитам</option></select></div>
+  </div>
+  <div id="clientsList"></div>`;
+  $('#clSearch').oninput=e=>{ clientFilter.q=e.target.value; renderClientsList(); };
+  $('#clStatusFilter').onchange=e=>{ clientFilter.status=e.target.value; renderClientsList(); };
+  $('#clSort').onchange=e=>{ clientFilter.sort=e.target.value; renderClientsList(); };
+  renderClientsList();
+};
+function statusBadgeClass(s){
+  const m={'Новый':'badge-new','VIP':'badge-vip','Постоянный':'badge-regular','Потерянный клиент':'badge-lost','Ожидает ответа':'badge-wait','Давно не был':'badge-wait','Неактивный':'badge-inactive','Запланирован повторный визит':'badge-regular'};
+  return m[s]||'badge-inactive';
+}
+/* ====================== SHARED CONTACT ICON ROW (клик по пустой кнопке -> заполнить, по заполненной -> перейти/позвонить) ====================== */
+function contactBtnHtml(client,key,label,hrefFn){
+  const val=client?client[key]:'';
+  const clientId=client?client.id:'';
+  if(val){
+    return `<a class="filled" href="${hrefFn(val)}" target="_blank" rel="noopener" title="${esc(label)}">${icon(key)}</a>`;
+  }
+  return `<button type="button" class="empty" title="Добавить ${esc(label)}" onclick="openContactFillSheet('${clientId}','${key}','${esc(label)}')">${icon(key)}</button>`;
+}
+function contactIconsRowHtml(client){
+  return [
+    contactBtnHtml(client,'phone','Телефон',v=>`tel:${esc(v)}`),
+    contactBtnHtml(client,'vk','ВКонтакте',v=>/^https?:\/\//.test(v)?esc(v):'https://vk.com/'+esc(v.replace('@',''))),
+    contactBtnHtml(client,'telegram','Telegram',v=>`https://t.me/${esc(v.replace('@','').replace(/^https?:\/\/t\.me\//,''))}`),
+    contactBtnHtml(client,'instagram','Instagram',v=>`https://instagram.com/${esc(v.replace('@','').replace(/^https?:\/\/(www\.)?instagram\.com\//,''))}`),
+    contactBtnHtml(client,'max','MAX',v=>/^https?:\/\//.test(v)?esc(v):'#')
+  ].join('');
+}
+function openQuickProjectSheet(clientId,selectId){
+  openSheet('Новый проект', `
+    <form id="quickProjectForm">
+    <label>Название проекта*</label><input required name="title" placeholder="напр. Рукав">
+    <label>Зона тела</label><input name="zone" placeholder="напр. Правая рука">
+    <div class="field-row">
+      <div><label>Сеансов, шт.</label><input type="number" name="sessionsPlanned" value="4" min="1"></div>
+      <div><label>Общая стоимость</label><input type="number" name="totalCost" placeholder="0"></div>
+    </div>
+    <button class="btn btn-primary btn-block" style="margin-top:12px" type="submit">Создать проект</button>
+    </form>
+  `,{centered:true});
+  const titleInput=$('#quickProjectForm [name=title]'); if(titleInput) setTimeout(()=>titleInput.focus(),50);
+  $('#quickProjectForm').onsubmit=async ev=>{
+    ev.preventDefault();
+    const fd=new FormData(ev.target);
