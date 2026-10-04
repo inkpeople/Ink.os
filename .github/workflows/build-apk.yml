@@ -15,6 +15,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      - run: cat www/index_2_part*.txt > www/index.html
       - run: npm install
       - run: npx cap add android
       - run: node scripts/patch-android.js
