@@ -1,0 +1,800 @@
+  <label>Сумма</label><input type="number" name="amount" required>
+  <label>Дата</label><input type="date" name="date" value="${todayISO()}">
+  <label>Комментарий</label><input name="comment">
+  <div class="row" style="margin-top:14px"><span></span><button class="btn btn-primary" type="submit">Сохранить</button></div>
+  </form>`);
+  function refreshCats(){ const t=$('#finType').value; const cats=t==='income'?INCOME_CATEGORIES:EXPENSE_CATEGORIES; $('#finCategory').innerHTML=Object.entries(cats).map(([k,v])=>`<option value="${k}">${v}</option>`).join(''); }
+  $('#finType').onchange=refreshCats; refreshCats();
+  $('#finForm').onsubmit=async e=>{
+    e.preventDefault(); const fd=new FormData(e.target);
+    const obj={id:uid(),type:fd.get('type'),category:fd.get('category'),amount:Number(fd.get('amount')),date:fd.get('date'),comment:fd.get('comment')};
+    await idbPut('finance',obj); S.finance.push(obj);
+    closeModal(); toast('Операция добавлена'); RENDERERS.finance();
+  };
+}
+function deleteFinance(id){
+  const f=S.finance.find(x=>x.id===id);
+  confirmDialog('Удалить операцию?',()=>{
+    trashDelete({store:'finance',listKey:'finance',id,message:'Операция удалена.',auditEntity:'Финансы',auditLabel:f?fmtMoney(f.amount):'',onChange:()=>{ if(currentRoute==='finance'){ RENDERERS.finance(); openFinOperations(); } }});
+  });
+}
+
+/* ====================== TRAINING & MENTORSHIP ====================== */
+const TRAINING_PROGRAMS=['Базовое обучение','Индивидуальное наставничество','Постановка руки','Композиция','Стили','Фотографирование','Продвижение','Личный бренд','Работа с клиентами','Бизнес'];
+const HOMEWORK_STATUSES=['Создано','Отправлено','Просмотрено','В работе','На проверке','Принято','Требуется исправление','Просрочено','Отменено'];
+RENDERERS.training=function(){
+  $('#content').innerHTML=`
+  <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Менторство</h2>
+    <button class="btn btn-primary btn-sm" onclick="openStudentForm()">+ Ученик</button></div>
+  <div class="tabbar" id="trainTabs">
+    <button data-t="students" class="active">Ученики</button>
+    <button data-t="homework">Домашние задания</button>
+  </div>
+  <div id="trainBody"></div>`;
+  $$('#trainTabs button').forEach(b=>b.onclick=()=>{ $$('#trainTabs button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); renderTrainBody(b.dataset.t); });
+  renderTrainBody('students');
+};
+function renderTrainBody(tab){
+  if(tab==='students'){
+    $('#trainBody').innerHTML = S.students.length? S.students.map(s=>{
+      const paid=(S.payments||[]).filter(p=>p.studentId===s.id).reduce((a,p)=>a+Number(p.amount||0),0);
+      const remain=Number(s.cost||0)-paid;
+      const hw=S.homework.filter(h=>h.studentId===s.id);
+      const hwDone=hw.filter(h=>h.status==='Принято').length;
+      const pct=hw.length? Math.round(hwDone/hw.length*100) : 0;
+      const initials=(s.name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+      return `<div class="card" style="margin-bottom:8px;cursor:pointer" onclick="openStudent('${s.id}')">
+        <div class="row" style="align-items:center;gap:10px">
+          <div class="avatar-circle sm">${esc(initials)}</div>
+          <div style="flex:1;min-width:0">
+            <div class="row"><b>${esc(s.name)}</b><span class="small dim">${pct}%</span></div>
+            <div class="small dim">${esc(s.program||'')} · ${hwDone}/${hw.length||0}</div>
+          </div>
+        </div>
+        <div class="progress-track" style="margin-top:8px"><div style="width:${pct}%"></div></div>
+        <div class="small dim" style="margin-top:4px">${esc(s.city||'')}${s.city?' · ':''}Остаток оплаты: ${fmtMoney(remain)}</div>
+      </div>`;
+    }).join('') : '<p class="dim">Учеников пока нет.</p>';
+  } else {
+    $('#trainBody').innerHTML = `<div class="row" style="margin-bottom:8px"><span></span><button class="btn btn-sm" onclick="openHomeworkForm()">+ Задание</button></div>` +
+    (S.homework.length? S.homework.slice().sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)).map(h=>`
+      <div class="card" style="margin-bottom:8px">
+        <div class="row"><b>${esc(h.title||'Задание')}</b><span class="badge ${h.status==='Просрочено'?'badge-lost':(h.status==='Принято'?'badge-regular':'badge-wait')}">${esc(h.status)}</span></div>
+        <div class="small dim">${studentName(h.studentId)} · срок: ${fmtDate(h.deadline)}</div>
+        <div class="small" style="margin-top:4px">${esc(h.description||'')}</div>
+        <div class="row" style="margin-top:6px">
+          <select onchange="setHomeworkStatus('${h.id}',this.value)">${HOMEWORK_STATUSES.map(st=>`<option ${h.status===st?'selected':''}>${st}</option>`).join('')}</select>
+          <button class="btn btn-sm" onclick="shareHomeworkText('${h.id}')">Поделиться</button>
+        </div>
+      </div>`).join('') : '<p class="dim">Заданий нет.</p>');
+  }
+}
+const SKILL_CATEGORIES=['Стерильность и безопасность','Постановка руки','Работа с машинкой','Линии','Контур','Тени','Плотность закраса','Композиция','Фотографирование','Общение с клиентом','Самостоятельная работа'];
+function openSkillsSheet(studentId){
+  const s=S.students.find(x=>x.id===studentId); if(!s) return;
+  s.skills=s.skills||{};
+  openSheet('Оценка навыков', `
+    ${SKILL_CATEGORIES.map((label,i)=>`
+      <div style="margin-bottom:10px">
+        <div class="row small"><span>${label}</span><span id="skillVal${i}">${s.skills[i]||3}/5</span></div>
+        <input type="range" min="1" max="5" step="1" value="${s.skills[i]||3}" data-i="${i}" oninput="document.getElementById('skillVal${i}').textContent=this.value+'/5'">
+      </div>`).join('')}
+    <button class="btn btn-primary btn-block" style="margin-top:8px" onclick="saveSkills('${studentId}')">Сохранить оценки</button>
+  `);
+}
+async function saveSkills(studentId){
+  const s=S.students.find(x=>x.id===studentId); if(!s) return;
+  s.skills=s.skills||{};
+  $$('#genericSheetBody input[type=range]').forEach(r=>{ s.skills[r.dataset.i]=Number(r.value); });
+  await idbPut('students',s);
+  closeSheet(); toast('Оценки сохранены');
+  if(document.getElementById('studentDetailBody')) openStudent(studentId);
+}
+function skillsAvg(s){
+  const vals=Object.values(s.skills||{});
+  return vals.length? (vals.reduce((a,b)=>a+b,0)/vals.length) : 0;
+}
+function openStudentForm(existing){
+  const s=existing||{id:null,name:'',phone:'',instagram:'',city:'',startDate:todayISO(),program:TRAINING_PROGRAMS[0],cost:'',level:'',goals:'',styles:'',strengths:'',weaknesses:''};
+  openModal(`<div class="modal-header"><h3>${existing?'Ученик':'Новый ученик'}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <form id="studentForm">
+  <label>Имя*</label><input required name="name" value="${esc(s.name)}">
+  <div class="field-row"><div><label>Телефон</label><input name="phone" value="${esc(s.phone)}"></div><div><label>Instagram</label><input name="instagram" value="${esc(s.instagram)}"></div></div>
+  <label>Город</label><input name="city" value="${esc(s.city)}">
+  <label>Дата начала</label><input type="date" name="startDate" value="${s.startDate}">
+  <label>Стоимость</label><input type="number" name="cost" value="${s.cost}">
+  <label>Программа</label><select name="program">${TRAINING_PROGRAMS.map(p=>`<option ${s.program===p?'selected':''}>${p}</option>`).join('')}</select>
+  <label>Уровень</label><input name="level" value="${esc(s.level)}">
+  <label>Цели</label><input name="goals" value="${esc(s.goals)}">
+  <label>Стили</label><input name="styles" value="${esc(s.styles)}">
+  <div class="field-row"><div><label>Сильные стороны</label><input name="strengths" value="${esc(s.strengths)}"></div><div><label>Слабые стороны</label><input name="weaknesses" value="${esc(s.weaknesses)}"></div></div>
+  <div class="row" style="margin-top:14px">${existing?`<button type="button" class="btn btn-danger" onclick="deleteStudent('${s.id}')">Удалить</button>`:'<span></span>'}<button class="btn btn-primary" type="submit">Сохранить</button></div>
+  </form>`);
+  $('#studentForm').onsubmit=async e=>{
+    e.preventDefault(); const fd=new FormData(e.target); const obj={...s}; fd.forEach((v,k)=>obj[k]=v); if(!obj.id) obj.id=uid();
+    await idbPut('students',obj); const idx=S.students.findIndex(x=>x.id===obj.id); if(idx>=0) S.students[idx]=obj; else S.students.push(obj);
+    closeModal(); toast('Ученик сохранён'); go('training');
+  };
+}
+function deleteStudent(id){
+  const st=S.students.find(x=>x.id===id);
+  confirmDialog('Удалить ученика?',()=>{
+    trashDelete({store:'students',listKey:'students',id,message:'Ученик удалён.',auditEntity:'Ученик',auditLabel:st?st.name:'',onChange:()=>{ go('training'); }});
+  });
+}
+function openStudent(id){
+  const s=S.students.find(x=>x.id===id); if(!s) return;
+  const hw=S.homework.filter(h=>h.studentId===id);
+  const avg=skillsAvg(s);
+  openModal(`<div class="modal-header"><h3>${esc(s.name)}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div id="studentDetailBody">
+  <div class="kv"><span>Программа</span><span>${esc(s.program)}</span></div>
+  <div class="kv"><span>Город</span><span>${esc(s.city)||'—'}</span></div>
+  <div class="kv"><span>Стоимость</span><span>${fmtMoney(s.cost)}</span></div>
+  <div class="kv"><span>Уровень</span><span>${esc(s.level)||'—'}</span></div>
+  <div class="kv"><span>Цели</span><span>${esc(s.goals)||'—'}</span></div>
+  <div class="kv"><span>Средняя оценка навыков</span><span>${avg?avg.toFixed(1)+'/5':'ещё не оценено'}</span></div>
+  ${Object.keys(s.skills||{}).length?`<div style="margin:8px 0">${SKILL_CATEGORIES.map((label,i)=>(s.skills||{})[i]?`<div class="small dim" style="display:flex;justify-content:space-between;padding:2px 0"><span>${label}</span><span>${s.skills[i]}/5</span></div>`:'').join('')}</div>`:''}
+  <button class="btn btn-sm" onclick="openSkillsSheet('${id}')">${icon('chart')} Оценить навыки</button>
+  <h4 style="margin-top:10px">Домашние задания</h4>
+  ${hw.length?hw.map(h=>`<div class="small" style="padding:4px 0;border-bottom:1px dashed var(--line)">${esc(h.title)} — ${h.status}${h.grade?(' · оценка '+h.grade+'/5'):''}</div>`).join(''):'<p class="dim small">Нет заданий</p>'}
+  <div class="row" style="margin-top:12px">
+    <button class="btn btn-sm" onclick="closeModal();openStudentForm(${jattr(s)})">Редактировать</button>
+    <button class="btn btn-sm btn-primary" onclick="closeModal();openHomeworkForm({studentId:'${id}'})">+ Задание</button>
+  </div>
+  </div>`);
+}
+const HOMEWORK_LIBRARY=[
+  {title:'Постановка руки: линии',description:'Сегодня изучали постановку руки и ровные линии. Нарисуйте 5 листов прямых и волнистых линий разной толщины.'},
+  {title:'Отработка теней',description:'Заштрихуйте 3 сферы с разным источником света, отрабатывая плавный переход тона.'},
+  {title:'Композиция эскиза',description:'Создайте 3 варианта композиции для одной идеи с разным расположением элементов.'},
+  {title:'Фотография работы',description:'Сделайте и обработайте 3 фото учебной работы по чек-листу из раздела «Фото».'}
+];
+function openHomeworkForm(presets){
+  openModal(`<div class="modal-header"><h3>Домашнее задание</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <form id="hwForm">
+  <label>Ученик</label><select name="studentId">${S.students.map(s=>`<option value="${s.id}" ${presets&&presets.studentId===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select>
+  <label>Шаблон (необязательно)</label>
+  <select id="hwTemplateSelect"><option value="">— свой текст —</option>${HOMEWORK_LIBRARY.map((t,i)=>`<option value="${i}">${t.title}</option>`).join('')}</select>
+  <label>Название</label><input name="title" id="hwTitle">
+  <label>Описание / инструкция</label><textarea name="description" id="hwDescription" rows="3"></textarea>
+  <label>Срок</label><input type="date" name="deadline">
+  <label>Приоритет</label><select name="priority"><option>Обычный</option><option>Высокий</option></select>
+  <label>Критерии приёмки</label><input name="criteria">
+  <label>Оценка (1-5, необязательно)</label><select name="grade"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+  <label>Комментарий наставнику</label><input name="mentorComment">
+  <div class="row" style="margin-top:14px"><span></span><button class="btn btn-primary" type="submit">Создать</button></div>
+  </form>`);
+  $('#hwTemplateSelect').onchange=e=>{
+    if(e.target.value===''){ return; }
+    const t=HOMEWORK_LIBRARY[Number(e.target.value)];
+    $('#hwTitle').value=t.title; $('#hwDescription').value=t.description;
+  };
+  $('#hwForm').onsubmit=async e=>{
+    e.preventDefault(); const fd=new FormData(e.target);
+    const obj={id:uid(),studentId:fd.get('studentId'),title:fd.get('title'),description:fd.get('description'),deadline:fd.get('deadline'),priority:fd.get('priority'),criteria:fd.get('criteria'),grade:fd.get('grade')?Number(fd.get('grade')):null,mentorComment:fd.get('mentorComment'),status:'Создано',createdAt:Date.now()};
+    await idbPut('homework',obj); S.homework.push(obj);
+    closeModal(); toast('Задание создано'); go('training');
+  };
+}
+function setHomeworkStatus(id,status){
+  const h=S.homework.find(x=>x.id===id); if(!h) return; h.status=status; idbPut('homework',h); toast('Статус обновлён');
+}
+function shareHomeworkText(id){
+  const h=S.homework.find(x=>x.id===id); if(!h) return;
+  const text=`Домашнее задание: ${h.title}\n${h.description}\nСрок: ${fmtDate(h.deadline)}\nКритерии: ${h.criteria||'—'}`;
+  if(navigator.share){ navigator.share({text}).catch(()=>{}); }
+  else { navigator.clipboard?.writeText(text); toast('Скопировано в буфер обмена'); }
+}
+
+/* ====================== INVENTORY ====================== */
+const INV_CATEGORIES={cartridge:'Картриджи',pigment:'Пигменты',material:'Материалы'};
+const EQUIPMENT_ITEMS=['Основная машинка','Запасная машинка','Аккумуляторы','Зарядные устройства','Блок питания','Планшет'];
+const MATERIAL_ITEMS=['Трансферная бумага','Масло/вазелин','Пенка','Ледокаин первичный','Ледокаин вторичный','Заживляющая плёнка'];
+const PIGMENT_ITEMS=['Чёрный','Цветной','Серый','Белый'];
+RENDERERS.inventory=function(){
+  const lowStock=S.inventory.filter(i=>i.category!=='equipment'&&i.qty<=i.threshold);
+  const nm=i=>esc(i.name)+(i.config?(' ('+i.config+(i.size?(' '+i.size):'')+')'):'');
+  const cats=Object.entries(INV_CATEGORIES).map(([k,label])=>{
+    const items=S.inventory.filter(i=>i.category===k); const qty=items.reduce((a,i)=>a+Number(i.qty||0),0), thr=items.reduce((a,i)=>a+Number(i.threshold||0),0);
+    const ratio=thr?Math.min(1,qty/(thr*3)):(qty?1:0); return {k,label,qty,ratio,n:items.length,cls:ratio<.34?'r':ratio<.7?'y':'g'};
+  }).filter(x=>x.n);
+  const agg={}; const cutoff=Date.now()-90*86400000;
+  S.cartridgeUsage.filter(u=>new Date(u.date).getTime()>=cutoff).forEach(u=>{ const k=(u.config||'')+' '+(u.size||''); agg[k]=(agg[k]||0)+Number(u.qty||0); });
+  const top=Object.entries(agg).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  $('#content').innerHTML=`
+  <div class="row" style="margin-bottom:12px"><span class="inv-sub">Остатки · Закупки · Расход</span>
+    <button class="btn btn-primary btn-icon btn-sm" onclick="openInventoryForm()">${icon('plus')}</button></div>
+  ${lowStock.length?`<div class="inv-warn"><div class="h"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l10 18H2z" opacity=".25"/><path d="M12 3.2L2.9 19.5h18.2zM12 9v5m0 2.5v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>Нужно закупить</div>
+    ${lowStock.map(i=>`<div class="inv-w" onclick="openInventoryForm(${jattr(i)})"><i class="${i.qty<=Math.floor(i.threshold/2)?'r':'y'}"></i><span>${nm(i)}</span><b class="${i.qty<=Math.floor(i.threshold/2)?'r':'y'}">${i.qty} ${i.unit||'шт.'}</b></div>`).join('')}</div>`:''}
+  ${cats.length?`<div class="cl-card"><div class="cl-lbl">Категории</div>${cats.map(x=>`<div class="inv-cat" onclick="invGoTab('${x.k}')"><span class="d"></span><span>${x.label}</span><b>${x.qty}</b><div class="inv-b"><div class="${x.cls}" style="width:${Math.max(6,Math.round(x.ratio*100))}%"></div></div></div>`).join('')}</div>`:''}
+  <div class="cl-card inv-after"><div><b>После сеанса</b><p>Что было использовано?</p></div><button onclick="openInvUsage()">Добавить расход</button></div>
+  ${top.length?`<div class="sec-label">Чаще всего используется</div><div class="cl-card inv-top"><ol>${top.map(([k,v])=>`<li>${esc(k.trim())} <span class="dim small">— ${v} шт.</span></li>`).join('')}</ol></div>`:''}
+  <div class="sec-label">Позиции</div>
+  <div class="tabbar" id="invTabs">
+    ${['cartridge','pigment','material','analysis','purchase'].map((t,i)=>`<button data-t="${t}" class="${i===0?'active':''}">${{cartridge:'Картриджи',pigment:'Пигменты',material:'Материалы',analysis:'Анализ',purchase:'Закупка'}[t]}</button>`).join('')}
+  </div>
+  <div id="invBody"></div>`;
+  $$('#invTabs button').forEach(b=>b.onclick=()=>{ $$('#invTabs button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); renderInvBody(b.dataset.t); });
+  renderInvBody('cartridge');
+};
+function invGoTab(t){ const b=document.querySelector('#invTabs button[data-t="'+t+'"]'); if(b){ b.click(); b.scrollIntoView({block:'center',behavior:'smooth'}); } }
+function openInvUsage(){
+  if(!S.inventory.length){ toast('Склад пуст — сначала добавьте позиции'); return; }
+  const items=S.inventory.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  openSheet('Расход материалов',`<form id="invUseForm">
+    <label>Что использовано</label><select name="item">${items.map(i=>`<option value="${i.id}">${esc(i.name)}${i.config?' ('+esc(i.config)+(i.size?' '+esc(i.size):'')+')':''} — осталось ${i.qty}</option>`).join('')}</select>
+    <label>Количество</label><input type="number" name="qty" min="1" value="1">
+    <button class="btn btn-primary btn-block" style="margin-top:14px" type="submit">Списать со склада</button></form>`);
+  $('#invUseForm').onsubmit=async ev=>{
+    ev.preventDefault(); const fd=new FormData(ev.target); const it=S.inventory.find(x=>x.id===fd.get('item')); const q=Number(fd.get('qty')||0);
+    if(!it||q<=0) return;
+    it.qty=Math.max(0,(it.qty||0)-q); await idbPut('inventory',it);
+    if(it.category==='cartridge'){ const u={id:uid(),eventId:'',config:it.config||it.name,size:it.size||'',qty:q,date:todayISO(),context:'manual'}; await idbPut('cartridgeUsage',u); S.cartridgeUsage.push(u); }
+    closeSheet(); toast('Расход записан'); RENDERERS.inventory();
+  };
+}
+function invItemsByCat(cat){ return S.inventory.filter(i=>i.category===cat); }
+function renderInvBody(tab){
+  if(['cartridge','pigment','material'].includes(tab)){
+    const items=invItemsByCat(tab);
+    $('#invBody').innerHTML = items.length? `<div class="table-wrap"><table><tr><th>Название</th><th>Остаток</th><th>Мин.</th><th></th></tr>${items.map(i=>`
+      <tr style="${i.qty<=i.threshold?'background:rgba(198,43,40,.08)':''}">
+        <td onclick="openInventoryForm(${jattr(i)})" style="cursor:pointer">${esc(i.name)}${i.config?(' ('+i.config+(i.size?(' '+i.size):'')+')'):''}${i.qty<=i.threshold?' ⚠️':''}</td>
+        <td>
+          <div class="qty-stepper">
+            <button onclick="stepInvQty('${i.id}',-1)">−</button>
+            <span style="min-width:34px;text-align:center;display:inline-block">${i.qty}</span>
+            <button onclick="stepInvQty('${i.id}',1)">+</button>
+            <span class="dim small">${i.unit||'шт.'}</span>
+          </div>
+        </td>
+        <td>${i.threshold}</td>
+        <td><button class="btn btn-icon btn-sm" onclick="openInventoryForm(${jattr(i)})">${icon('edit')}</button></td>
+      </tr>`).join('')}</table></div>` : '<p class="dim">Позиций нет. Добавьте через кнопку «+ Позиция» или загрузите демо-данные.</p>';
+  } else if(tab==='analysis'){ renderCartridgeAnalysis(); }
+  else if(tab==='purchase'){ renderPurchaseRecommendation(); }
+}
+function stepInvQty(id,delta){
+  const item=S.inventory.find(i=>i.id===id); if(!item) return;
+  item.qty=Math.max(0,(item.qty||0)+delta);
+  idbPut('inventory',item);
+  renderInvBody($$('#invTabs button.active')[0]?.dataset.t||'cartridge');
+}
+function openInventoryForm(existing){
+  const i=existing||{id:null,category:'material',name:'',config:'',size:'',brand:'',qty:0,threshold:5,unit:'шт.'};
+  openModal(`<div class="modal-header"><h3>${existing?'Позиция склада':'Новая позиция'}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <form id="invForm">
+  <label>Категория</label><select name="category">${Object.entries(INV_CATEGORIES).map(([k,v])=>`<option value="${k}" ${i.category===k?'selected':''}>${v}</option>`).join('')}</select>
+  <label>Название</label><input name="name" required value="${esc(i.name)}">
+  <div class="field-row">
+    <div><label>Конфигурация (для картриджей)</label><select name="config"><option value="">—</option>${CARTRIDGE_CONFIGS.map(c=>`<option ${i.config===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div><label>Размер</label><input name="size" value="${esc(i.size||'')}"></div>
+  </div>
+  <label>Бренд</label><input name="brand" value="${esc(i.brand||'')}">
+  <div class="field-row">
+    <div><label>Остаток</label><input type="number" name="qty" value="${i.qty}"></div>
+    <div><label>Минимальный остаток</label><input type="number" name="threshold" value="${i.threshold}"></div>
+    <div><label>Единица</label><input name="unit" value="${esc(i.unit||'шт.')}"></div>
+  </div>
+  <div class="row" style="margin-top:14px">${existing?`<button type="button" class="btn btn-danger" onclick="deleteInventory('${i.id}')">Удалить</button>`:'<span></span>'}<button class="btn btn-primary" type="submit">Сохранить</button></div>
+  </form>`);
+  $('#invForm').onsubmit=async e=>{
+    e.preventDefault(); const fd=new FormData(e.target); const obj={...i}; fd.forEach((v,k)=>obj[k]=(k==='qty'||k==='threshold')?Number(v):v); if(!obj.id) obj.id=uid();
+    await idbPut('inventory',obj); const idx=S.inventory.findIndex(x=>x.id===obj.id); if(idx>=0) S.inventory[idx]=obj; else S.inventory.push(obj);
+    closeModal(); toast('Сохранено'); go('inventory');
+  };
+}
+function deleteInventory(id){
+  const it=S.inventory.find(x=>x.id===id);
+  confirmDialog('Удалить позицию склада?',()=>{
+    trashDelete({store:'inventory',listKey:'inventory',id,message:'Позиция склада удалена.',auditEntity:'Склад',auditLabel:it?it.name:'',onChange:()=>{ go('inventory'); }});
+  });
+}
+
+function cartridgeKey(u){ return u.config+'|'+(u.size||''); }
+function renderCartridgeAnalysis(){
+  const now=Date.now();
+  function usageSince(days){
+    const cutoff=now-days*86400000;
+    const agg={};
+    S.cartridgeUsage.filter(u=>new Date(u.date).getTime()>=cutoff).forEach(u=>{ const k=cartridgeKey(u); agg[k]=(agg[k]||0)+Number(u.qty||0); });
+    return agg;
+  }
+  const u30=usageSince(30), u90=usageSince(90), u365=usageSince(365);
+  const top30=Object.entries(u30).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  $('#invBody').innerHTML=`
+  <div class="card">
+    <h3>Самые часто используемые (30 дней)</h3>
+    ${top30.length? '<ol>'+top30.map(([k,v])=>`<li>${k.replace('|',' ')} — ${v} шт.</li>`).join('')+'</ol>' : '<p class="dim">Недостаточно истории использования.</p>'}
+  </div>
+  <div class="grid grid-3" style="margin-top:10px">
+    <div class="stat"><div class="num">${Object.values(u30).reduce((a,b)=>a+b,0)}</div><div class="lbl">30 дней</div></div>
+    <div class="stat"><div class="num">${Object.values(u90).reduce((a,b)=>a+b,0)}</div><div class="lbl">90 дней</div></div>
+    <div class="stat"><div class="num">${Object.values(u365).reduce((a,b)=>a+b,0)}</div><div class="lbl">Год</div></div>
+  </div>
+  <p class="small dim" style="margin-top:10px">Данные считаются по фактическим записям расхода картриджей после сеансов и Guest Spot — без AI, по локальной статистике.</p>`;
+}
+function renderPurchaseRecommendation(){
+  const lead=Number(S.settings.leadTimeDays||7), reserve=Number(S.settings.reserve||3);
+  const now=Date.now();
+  const cutoff=now-30*86400000;
+  const usage30={};
+  S.cartridgeUsage.filter(u=>new Date(u.date).getTime()>=cutoff).forEach(u=>{ const k=cartridgeKey(u); usage30[k]=(usage30[k]||0)+Number(u.qty||0); });
+  const cartridgeItems=invItemsByCat('cartridge');
+  const rows=cartridgeItems.map(item=>{
+    const k=cartridgeKey({config:item.config,size:item.size});
+    const used30=usage30[k]||0;
+    const hasHistory=used30>0;
+    const avgDay=used30/30;
+    const recommended = hasHistory ? Math.ceil(avgDay*lead+reserve) : null;
+    const toBuy = hasHistory ? Math.max(0,recommended-item.qty) : null;
+    const status = !hasHistory ? 'недостаточно истории' : (item.qty<=item.threshold?'докупить срочно':(toBuy>0?'докупить':'достаточно'));
+    return {name:(item.config||'')+' '+(item.size||''),qty:item.qty,used30,avgDay,threshold:item.threshold,toBuy,status,hasHistory};
+  });
+  $('#invBody').innerHTML=`
+  <div class="card">
+    <h3>Рекомендация закупки картриджей</h3>
+    <p class="small dim">Формула: рекомендуемый запас = средний расход в день × срок поставки (${lead} дн.) + резерв (${reserve} шт.). Если истории мало — используется минимальный остаток, и предлагается ввести количество вручную.</p>
+    <div class="table-wrap"><table><tr><th>Конфигурация</th><th>Остаток</th><th>30 дн.</th><th>Средн./день</th><th>Мин.</th><th>Купить</th><th>Статус</th></tr>
+    ${rows.length?rows.map(r=>`<tr style="${r.status.includes('срочно')?'background:rgba(198,43,40,.1)':''}">
+      <td>${esc(r.name)}</td><td>${r.qty}</td><td>${r.used30}</td><td>${r.avgDay.toFixed(2)}</td><td>${r.threshold}</td>
+      <td>${r.hasHistory? r.toBuy : '<span class="dim">вручную</span>'}</td><td>${r.status}</td></tr>`).join(''):'<tr><td colspan="7" class="dim">Нет картриджей на складе. Добавьте позиции в разделе «Картриджи».</td></tr>'}
+    </table></div>
+  </div>`;
+}
+
+/* ====================== GUEST SPOT ====================== */
+RENDERERS.guestspot=function(){
+  $('#content').innerHTML=`
+  <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Guest Spot</h2><button class="btn btn-primary btn-icon btn-sm" onclick="openGuestSpotForm()">${icon('plus')}</button></div>
+  <div id="gsList"></div>`;
+  $('#gsList').innerHTML = S.guestSpots.length? S.guestSpots.slice().sort((a,b)=>new Date(b.dateStart||0)-new Date(a.dateStart||0)).map(g=>`
+    <div class="card" style="margin-bottom:8px;cursor:pointer" onclick="openGuestSpotForm(${jattr(g)})">
+      <div class="row"><b>${esc(g.city)} — ${esc(g.place||'')}</b><span class="badge ${g.closed?'badge-regular':'badge-wait'}">${g.closed?'Закрыта':'Открыта'}</span></div>
+      <div class="small dim">${fmtDate(g.dateStart)} – ${fmtDate(g.dateEnd)} · Сеансов: ${g.sessionsCount||0}</div>
+      ${(()=>{const t=gsStats(g);return t.inc||t.exp?`<div class="small" style="margin-top:4px">Доход ${fmtMoney(t.inc)} · расходы ${fmtMoney(t.exp)} · <b style="color:${t.net>=0?'var(--green)':'var(--red-soft)'}">${t.net>=0?'+':''}${fmtMoney(t.net)}</b></div>`:'';})()}
+      <div class="row" style="margin-top:8px">
+        <span class="small dim">Нажмите, чтобы открыть и отредактировать</span>
+        ${!g.closed?`<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();closeGuestSpot('${g.id}')">Закрыть поездку</button>`:''}
+      </div>
+    </div>`).join('') : '<p class="dim">Поездок пока нет. Нажмите + чтобы добавить.</p>';
+};
+const GS_MATERIALS=['Картриджи','Чёрный пигмент','Цветной пигмент','Серый пигмент','Белый пигмент','Трансферная бумага','Масло/вазелин','Пенка','Ледокаин первичный','Ледокаин вторичный','Заживляющая плёнка'];
+function openGuestSpotForm(existing){
+  const g=existing||{id:null,city:'',place:'',dateStart:todayISO(),dateEnd:todayISO(),address:'',contact:'',notes:'',materialsPlanned:{},closed:false,sessionsCount:0};
+  openModal(`<div class="modal-header"><h3>${existing?'Guest Spot':'Новая поездка'}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <form id="gsForm">
+  <label>Город</label><input name="city" required value="${esc(g.city)}">
+  <label>Место</label><input name="place" value="${esc(g.place)}">
+  <div class="field-row"><div><label>Дата начала</label><input type="date" name="dateStart" value="${g.dateStart}"></div><div><label>Дата окончания</label><input type="date" name="dateEnd" value="${g.dateEnd}"></div></div>
+  <label>Адрес</label><input name="address" value="${esc(g.address)}">
+  <label>Контакт</label><input name="contact" value="${esc(g.contact)}">
+  <label>Заметки</label><textarea name="notes" rows="2">${esc(g.notes)}</textarea>
+  <label>Расходы на поездку</label>
+  <div class="field-row"><div><label>Дорога</label><input type="number" name="expTravel" value="${g.expTravel||''}"></div><div><label>Жильё</label><input type="number" name="expHome" value="${g.expHome||''}"></div><div><label>Прочее</label><input type="number" name="expOther" value="${g.expOther||''}"></div></div>
+  ${existing?(()=>{const t=gsStats(g);return `<div class="cl-card ev-sum"><div class="r"><span>Доход за даты поездки</span><b>${fmtMoney(t.inc)}</b></div><div class="r"><span>Расходы</span><b>${fmtMoney(t.exp)}</b></div><div class="r rest ${t.net>=0?'ok':''}"><span>${t.net>=0?'Окупилась, прибыль':'Не окупилась'}</span><b>${fmtMoney(t.net)}</b></div></div>`;})():''}
+  <label>Материалы для поездки (план, количество)</label>
+  <div class="grid grid-2" style="gap:8px">
+  ${GS_MATERIALS.map(m=>`<div><label style="margin:0 0 2px;font-size:10px">${m}</label><input type="number" name="mat_${m}" value="${(g.materialsPlanned&&g.materialsPlanned[m])||''}" placeholder="0"></div>`).join('')}
+  </div>
+  <div class="row" style="margin-top:14px">${existing?`<button type="button" class="btn btn-danger" onclick="deleteGuestSpot('${g.id}')">Удалить</button>`:'<span></span>'}<button class="btn btn-primary" type="submit">Сохранить</button></div>
+  </form>`);
+  $('#gsForm').onsubmit=async e=>{
+    e.preventDefault(); const fd=new FormData(e.target); const obj={...g};
+    obj.city=fd.get('city'); obj.place=fd.get('place'); obj.dateStart=fd.get('dateStart'); obj.dateEnd=fd.get('dateEnd'); obj.address=fd.get('address'); obj.contact=fd.get('contact'); obj.notes=fd.get('notes'); obj.expTravel=Number(fd.get('expTravel')||0); obj.expHome=Number(fd.get('expHome')||0); obj.expOther=Number(fd.get('expOther')||0);
+    obj.materialsPlanned={}; GS_MATERIALS.forEach(m=>{ const v=fd.get('mat_'+m); if(v) obj.materialsPlanned[m]=Number(v); });
+    if(!obj.id) obj.id=uid();
+    await idbPut('guestSpots',obj); const idx=S.guestSpots.findIndex(x=>x.id===obj.id); if(idx>=0) S.guestSpots[idx]=obj; else S.guestSpots.push(obj);
+    closeModal(); toast('Сохранено'); go('guestspot');
+  };
+}
+function deleteGuestSpot(id){
+  const g=S.guestSpots.find(x=>x.id===id);
+  confirmDialog('Удалить поездку?',()=>{
+    trashDelete({store:'guestSpots',listKey:'guestSpots',id,message:'Поездка удалена.',auditEntity:'Guest Spot',auditLabel:g?g.city:'',onChange:()=>{ go('guestspot'); }});
+  });
+}
+function closeGuestSpot(id){
+  const g=S.guestSpots.find(x=>x.id===id); if(!g) return;
+  openModal(`<div class="modal-header"><h3>Закрыть поездку: ${esc(g.city)}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <p class="small dim">Укажите использованное и возвращённое количество по каждому материалу. Использованное спишется со склада, возвращённое (только неиспользованное запечатанное) вернётся.</p>
+  <form id="gsCloseForm">
+  ${Object.entries(g.materialsPlanned||{}).map(([m,planned])=>`
+    <div class="card" style="margin-bottom:6px">
+      <div class="row small"><b>${m}</b><span class="dim">План: ${planned}</span></div>
+      <div class="field-row"><div><label>Использовано</label><input type="number" name="used_${m}" value="0"></div><div><label>Возвращено</label><input type="number" name="returned_${m}" value="0"></div></div>
+    </div>`).join('') || '<p class="dim small">Материалы не были запланированы.</p>'}
+  <div class="row" style="margin-top:14px"><span></span><button class="btn btn-primary" type="submit">Закрыть и обновить склад</button></div>
+  </form>`);
+  $('#gsCloseForm').onsubmit=async e=>{
+    e.preventDefault(); const fd=new FormData(e.target);
+    Object.keys(g.materialsPlanned||{}).forEach(m=>{
+      const used=Number(fd.get('used_'+m)||0);
+      // find matching inventory item by name fragment
+      let item=S.inventory.find(i=>i.name===m || (m==='Картриджи'&&i.category==='cartridge'));
+      if(item){ item.qty=Math.max(0,(item.qty||0)-used); idbPut('inventory',item); }
+    });
+    g.closed=true; g.closedAt=todayISO();
+    await idbPut('guestSpots',g);
+    closeModal(); toast('Поездка закрыта, склад обновлён'); go('guestspot');
+  };
+}
+
+/* ====================== CITIES ====================== */
+RENDERERS.cities=function(){
+  const agg={};
+  S.clients.forEach(c=>{
+    if(!c.city) return;
+    agg[c.city]=agg[c.city]||{clients:0,revenue:0,visits:0};
+    agg[c.city].clients++;
+    agg[c.city].revenue+=Number(c.totalSum||0);
+    agg[c.city].visits+=Number(c.visits||0);
+  });
+  const totalRevenue=Object.values(agg).reduce((s,c)=>s+c.revenue,0)||1;
+  const totalClients=S.clients.length||1;
+  const rows=Object.entries(agg).sort((a,b)=>b[1].revenue-a[1].revenue);
+  const maxRevenue=Math.max(1,...rows.map(r=>r[1].revenue));
+  $('#content').innerHTML=`
+  <h2>Города клиентов</h2>
+  <p class="small dim">Локальный учёт городов без онлайн-карт: тепловая таблица на основе ваших данных.</p>
+  <div class="card" style="margin-bottom:12px"><h3>Тепловая таблица</h3>
+  <div class="table-wrap"><table><tr><th>Город</th><th>Клиентов</th><th>Визитов</th><th>Выручка</th><th>% кл.</th><th>% выр.</th></tr>
+  ${rows.length?rows.map(([city,d])=>`<tr><td style="background:linear-gradient(90deg, rgba(198,43,40,${(d.revenue/maxRevenue*0.5).toFixed(2)}), transparent);white-space:nowrap">${esc(city)}</td><td>${d.clients}</td><td>${d.visits}</td><td style="white-space:nowrap">${fmtMoney(d.revenue)}</td><td>${(d.clients/totalClients*100).toFixed(0)}%</td><td>${(d.revenue/totalRevenue*100).toFixed(0)}%</td></tr>`).join(''):'<tr><td colspan="6" class="dim">Нет данных о городах.</td></tr>'}
+  </table></div></div>`;
+};
+
+/* ====================== PHOTOS: camera assistant + processing ====================== */
+const PHOTO_PRESETS={
+  portfolio:{label:'Портфолио студии',contrast:1.08,brightness:1.02,saturation:1.05},
+  bw:{label:'Чёрно-серый',bw:true,contrast:1.1},
+  color:{label:'Цветная татуировка',saturation:1.2,contrast:1.05},
+  instagram:{label:'Instagram (1:1)',ratio:1,contrast:1.05,saturation:1.08},
+  stories:{label:'Stories (9:16)',ratio:9/16,contrast:1.05,saturation:1.08},
+  beforeafter:{label:'До/после',contrast:1.0},
+  archive:{label:'Архив',contrast:1.0,saturation:1.0}
+};
+let photoState={file:null,img:null,canvas:null,adjust:{brightness:1,contrast:1,saturation:1,redReduce:0,logo:true},clientId:'',cameraStream:null};
+RENDERERS.photos=function(){
+  $('#content').innerHTML=`
+  <h2>Фото</h2>
+  <div class="tabbar" id="photoTabs"><button data-t="camera" class="active">Помощник фотографа</button><button data-t="edit">Обработка</button><button data-t="library">Библиотека</button></div>
+  <div id="photoBody"></div>`;
+  $$('#photoTabs button').forEach(b=>b.onclick=()=>{ $$('#photoTabs button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); renderPhotoBody(b.dataset.t); });
+  renderPhotoBody('camera');
+};
+function renderPhotoBody(tab){
+  if(tab==='camera'){
+    const insecure = !(window.isSecureContext || location.hostname==='localhost');
+    const noApi = !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    $('#photoBody').innerHTML=`
+    <p class="small dim">Оценивает яркость и резкость кадра локально в браузере (без интернета). Это не медицинская оценка кожи или заживления.</p>
+    ${insecure ? `<div class="card card-red" style="margin-bottom:10px"><b>⚠️ Камера недоступна для этого файла</b><div class="small dim" style="margin-top:4px">Браузеры разрешают доступ к камере только для страниц, открытых по адресу https:// или localhost, из соображений безопасности. Файл, открытый напрямую двойным нажатием (file://), доступ к камере получить не может — это ограничение браузера, а не приложения. Используйте кнопку «Выбрать из галереи» ниже — она работает всегда, включая съёмку прямо в моменте через системную камеру телефона.</div></div>` : ''}
+    ${(!insecure && noApi) ? `<div class="card card-red" style="margin-bottom:10px"><b>⚠️ Этот браузер не поддерживает доступ к камере</b><div class="small dim" style="margin-top:4px">Используйте кнопку «Выбрать из галереи» — на телефоне она обычно тоже предлагает «Сделать фото».</div></div>` : ''}
+    <div class="camera-frame" id="cameraFrame" style="max-width:420px;aspect-ratio:3/4">
+      <video id="camVideo" autoplay playsinline style="width:100%;height:100%;object-fit:cover;display:none"></video>
+      <canvas id="camOverlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
+      <div id="camPlaceholder" style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--text-mute);text-align:center;padding:10px">Камера не запущена</div>
+    </div>
+    <div class="btn-row" style="margin-top:10px;max-width:420px">
+      <button class="btn btn-primary btn-sm" id="camStartBtn" ${insecure||noApi?'disabled':''}>Включить камеру</button>
+      <button class="btn btn-sm" id="camShotBtn" disabled>Снять кадр</button>
+    </div>
+    <div id="camScoreWrap" class="small" style="margin-top:8px;max-width:420px"></div>
+    <div style="margin-top:10px">
+      <label>Выбрать / снять фото из галереи (работает всегда)</label>
+      <input type="file" id="galleryInput" accept="image/*" capture="environment">
+    </div>`;
+    wireCamera();
+  } else if(tab==='edit'){
+    $('#photoBody').innerHTML=`
+    <div class="row"><label style="margin:0">Клиент</label><select id="photoClientSelect" style="max-width:220px"><option value="">—</option>${S.clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+    <input type="file" id="editFileInput" accept="image/*" style="margin:8px 0">
+    <div id="editArea" class="hidden">
+      <canvas id="editCanvas" style="max-width:100%;border-radius:10px;border:1px solid var(--line)"></canvas>
+      <div class="grid grid-2" style="margin-top:10px">
+        <div><label>Яркость</label><input type="range" min="50" max="150" value="100" id="rBrightness"></div>
+        <div><label>Контраст</label><input type="range" min="50" max="150" value="100" id="rContrast"></div>
+        <div><label>Насыщенность</label><input type="range" min="0" max="200" value="100" id="rSaturation"></div>
+        <div><label>Снижение покраснения (визуально)</label><input type="range" min="0" max="100" value="0" id="rRedReduce"></div>
+      </div>
+      <div class="row" style="margin-top:8px"><label style="margin:0"><input type="checkbox" id="cLogo" checked> Добавить логотип</label></div>
+      <div class="small dim" style="margin-top:6px">Пресеты:</div>
+      <div class="scroll-x">${Object.entries(PHOTO_PRESETS).map(([k,p])=>`<span class="chip" onclick="applyPreset('${k}')">${p.label}</span>`).join('')}</div>
+      ${(S.settings.thresholds)?'':''}
+      <p class="small dim" style="margin-top:8px;color:var(--yellow)">⚠️ Коррекция покраснения кожи — только визуальная (не медицинская оценка), не изменяет саму татуировку, оригинал всегда сохраняется отдельно.</p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn btn-sm" onclick="resetEdit()">Сбросить</button>
+        <button class="btn btn-primary btn-sm" onclick="savePhoto()">Сохранить (оригинал + обработанная копия)</button>
+      </div>
+    </div>`;
+    $('#editFileInput').onchange=handleEditFile;
+    $('#photoClientSelect').onchange=e=>photoState.clientId=e.target.value;
+    ['rBrightness','rContrast','rSaturation','rRedReduce'].forEach(id=>$('#'+id) && ($('#'+id).oninput=renderEditCanvas));
+    $('#cLogo') && ($('#cLogo').onchange=renderEditCanvas);
+  } else if(tab==='library'){
+    $('#photoBody').innerHTML = (S.photos.length? `
+      <div class="row" style="margin-bottom:10px"><span class="small dim">${S.photos.length} фото</span><button class="btn btn-sm" onclick="openBeforeAfterSheet()">${icon('photos')} Сравнить до/после</button></div>
+      <div class="grid grid-3">${S.photos.slice().reverse().map(p=>`
+      <div class="card" style="padding:6px">
+        <img src="${p.processedDataUrl||p.dataUrl}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover">
+        <div class="small dim">${clientName(p.clientId)||'Без клиента'}</div>
+        <select class="small" style="margin-top:4px;padding:2px" onchange="setPhotoTag('${p.id}',this.value)">
+          <option value="" ${!p.tag?'selected':''}>Без метки</option>
+          <option value="before" ${p.tag==='before'?'selected':''}>До</option>
+          <option value="after" ${p.tag==='after'?'selected':''}>После</option>
+        </select>
+        <button class="btn btn-sm btn-danger" style="width:100%;margin-top:4px" onclick="deletePhoto('${p.id}')">${icon('close')} Удалить</button>
+      </div>`).join('')}</div>` : '<p class="dim">Фото пока нет.</p>');
+  }
+}
+/* --- Camera assistant --- */
+function wireCameraRetry(){ $('#camStartBtn')?.click(); }
+function wireCamera(){
+  const startBtn=$('#camStartBtn');
+  if(startBtn) startBtn.onclick=async ()=>{
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      toast('Камера недоступна в этом браузере — выберите фото из галереи.');
+      return;
+    }
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      photoState.cameraStream=stream;
+      const v=$('#camVideo'); v.srcObject=stream; v.style.display='block'; $('#camPlaceholder').style.display='none';
+      $('#camShotBtn').disabled=false;
+      requestAnimationFrame(analyzeFrameLoop);
+    }catch(e){
+      let msg='Не удалось получить доступ к камере. Выберите фото из галереи.';
+      let steps='';
+      if(e && e.name==='NotAllowedError'){
+        msg='Доступ к камере запрещён';
+        steps=`<div style="text-align:left;margin-top:10px" class="small dim">
+          <b style="color:var(--text)">Как разрешить:</b><br>
+          • В адресной строке нажмите на значок 🔒 / ⓘ рядом с адресом сайта.<br>
+          • Найдите пункт «Камера» и выберите «Разрешить».<br>
+          • Обновите страницу и нажмите «Включить камеру» ещё раз.<br>
+          Если это не помогло — браузер мог запомнить прошлый отказ навсегда. Проще всего воспользоваться кнопкой «Выбрать из галереи» ниже — на телефоне она откроет системную камеру.
+        </div>`;
+      }
+      else if(e && e.name==='NotFoundError') msg='Камера не найдена на этом устройстве.';
+      else if(e && e.name==='NotReadableError') msg='Камера уже используется другим приложением. Закройте его и нажмите «Повторить».';
+      $('#camPlaceholder').style.display='flex';
+      $('#camPlaceholder').style.flexDirection='column';
+      $('#camPlaceholder').innerHTML=`<b>⚠️ ${esc(msg)}</b>${steps}<button class="btn btn-sm" style="margin-top:10px" onclick="wireCameraRetry()">Повторить</button>`;
+      toast(msg);
+    }
+  };
+  $('#camShotBtn').onclick=()=>{
+    const v=$('#camVideo'); const c=document.createElement('canvas'); c.width=v.videoWidth||720; c.height=v.videoHeight||960;
+    c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+    stopCamera();
+    loadImageToEditor(c.toDataURL('image/jpeg',0.92));
+    $$('#photoTabs button')[1].click();
+  };
+  $('#galleryInput').onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const reader=new FileReader();
+    reader.onload=ev=>{ loadImageToEditor(ev.target.result); $$('#photoTabs button')[1].click(); };
+    reader.readAsDataURL(f);
+  };
+}
+function stopCamera(){ if(photoState.cameraStream){ photoState.cameraStream.getTracks().forEach(t=>t.stop()); photoState.cameraStream=null; } }
+function analyzeFrameLoop(){
+  const v=$('#camVideo'); const ov=$('#camOverlay');
+  if(!v || v.style.display==='none' || !photoState.cameraStream) return;
+  ov.width=v.clientWidth; ov.height=v.clientHeight;
+  const tmp=document.createElement('canvas'); tmp.width=80; tmp.height=100;
+  const tctx=tmp.getContext('2d'); tctx.drawImage(v,0,0,80,100);
+  let data; try{ data=tctx.getImageData(0,0,80,100).data; }catch(e){ return; }
+  let sum=0,count=0,edgeSum=0;
+  for(let i=0;i<data.length;i+=4){ const l=(data[i]+data[i+1]+data[i+2])/3; sum+=l; count++; }
+  const avg=sum/count; // brightness 0-255
+  // crude sharpness via variance of luminance diff between neighboring samples
+  let variance=0,prev=null,n=0;
+  for(let i=0;i<data.length;i+=16){ const l=(data[i]+data[i+1]+data[i+2])/3; if(prev!==null){ variance+=Math.abs(l-prev); n++; } prev=l; }
+  const sharpness=n?variance/n:0;
+  let score=100, hints=[];
+  if(avg<60){ score-=30; hints.push('Слишком темно — измените свет'); }
+  else if(avg>200){ score-=25; hints.push('Пересвет — уберите блик или уменьшите свет'); }
+  if(sharpness<3){ score-=25; hints.push('Возможна дрожь камеры — держите ровно'); }
+  if(hints.length===0){ hints.push('Кадр выглядит стабильным'); }
+  score=Math.max(0,Math.min(100,score));
+  const frameEl=$('#cameraFrame');
+  frameEl.className='camera-frame '+(score>70?'good':score>40?'warn':'bad');
+  $('#camScoreWrap').innerHTML=`<div>Оценка кадра: <b>${score}/100</b></div><div class="dim">${hints.join(' · ')}</div>`;
+  requestAnimationFrame(analyzeFrameLoop);
+}
+/* --- Photo editor --- */
+function handleEditFile(e){
+  const f=e.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=ev=>loadImageToEditor(ev.target.result);
+  reader.readAsDataURL(f);
+}
+function loadImageToEditor(dataUrl){
+  const img=new Image();
+  img.onload=()=>{
+    photoState.file=dataUrl; photoState.img=img;
+    photoState.adjust={brightness:1,contrast:1,saturation:1,redReduce:0,logo:true};
+    if($('#editArea')) $('#editArea').classList.remove('hidden');
+    renderEditCanvas();
+  };
+  img.src=dataUrl;
+}
+function resetEdit(){ if(photoState.img) loadImageToEditor(photoState.file); }
+function applyPreset(key){
+  const p=PHOTO_PRESETS[key];
+  if($('#rBrightness')) $('#rBrightness').value=(p.brightness||1)*100;
+  if($('#rContrast')) $('#rContrast').value=(p.contrast||1)*100;
+  if($('#rSaturation')) $('#rSaturation').value=(p.saturation||1)*100;
+  renderEditCanvas();
+}
+function renderEditCanvas(){
+  if(!photoState.img) return;
+  const canvas=$('#editCanvas'); const img=photoState.img;
+  let w=img.width,h=img.height; const maxW=640; if(w>maxW){ h=h*maxW/w; w=maxW; }
+  canvas.width=w; canvas.height=h;
+  const ctx=canvas.getContext('2d');
+  const b=($('#rBrightness')?.value||100)/100, c=($('#rContrast')?.value||100)/100, s=($('#rSaturation')?.value||100)/100, r=($('#rRedReduce')?.value||0)/100;
+  ctx.filter=`brightness(${b}) contrast(${c}) saturate(${s})`;
+  ctx.drawImage(img,0,0,w,h);
+  ctx.filter='none';
+  if(r>0){
+    const id=ctx.getImageData(0,0,w,h); const d=id.data;
+    for(let i=0;i<d.length;i+=4){
+      const avg=(d[i]+d[i+1]+d[i+2])/3;
+      if(d[i]>d[i+1]+18 && d[i]>d[i+2]+18){ d[i]=d[i]-(d[i]-avg)*r; }
+    }
+    ctx.putImageData(id,0,0);
+  }
+  if($('#cLogo')?.checked && S.settings.logo){
+    const logo=new Image();
+    logo.onload=()=>{ const lw=w*0.22; const lh=logo.height*(lw/logo.width); ctx.globalAlpha=0.85; ctx.drawImage(logo,w-lw-10,h-lh-10,lw,lh); ctx.globalAlpha=1; };
+    logo.src=S.settings.logo;
+  }
+}
+async function savePhoto(){
+  const canvas=$('#editCanvas'); if(!canvas){ toast('Нет фото для сохранения'); return; }
+  const processedDataUrl=canvas.toDataURL('image/jpeg',0.9);
+  const obj={id:uid(),clientId:photoState.clientId||'',dataUrl:photoState.file,processedDataUrl,history:['original','adjusted'],createdAt:Date.now(),tag:''};
+  await idbPut('photos',obj); S.photos.push(obj);
+  toast('Фото сохранено (оригинал + обработанная копия)');
+}
+function setPhotoTag(id,tag){
+  const p=S.photos.find(x=>x.id===id); if(!p) return;
+  p.tag=tag; idbPut('photos',p);
+}
+function deletePhoto(id){
+  const p=S.photos.find(x=>x.id===id);
+  confirmDialog('Удалить фото?',()=>{
+    trashDelete({store:'photos',listKey:'photos',id,message:'Фото удалено.',auditEntity:'Фото',auditLabel:p?clientName(p.clientId):'',onChange:()=>{ if(currentRoute==='photos') renderPhotoBody('library'); }});
+  });
+}
+/* --- До/после: интерактивное сравнение (clip-path, без внешних библиотек) --- */
+function openBeforeAfterSheet(){
+  if(S.photos.length<2){ toast('Нужно как минимум 2 фото для сравнения'); return; }
+  const clientOptions=`<option value="">Все клиенты</option>`+S.clients.filter(c=>S.photos.some(p=>p.clientId===c.id)).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  openSheet('Сравнение до/после', `
+    <label>Клиент</label><select id="baClientSel">${clientOptions}</select>
+    <div class="field-row">
+      <div><label>Фото «до»</label><select id="baBeforeSel"></select></div>
+      <div><label>Фото «после»</label><select id="baAfterSel"></select></div>
+    </div>
+    <div id="baViewer" style="margin-top:12px"></div>
+  `);
+  function photoList(){
+    const cid=$('#baClientSel').value;
+    return S.photos.filter(p=>!cid||p.clientId===cid);
+  }
+  function fillSelects(){
+    const list=photoList();
+    const label=p=>`${clientName(p.clientId)||'Без клиента'} · ${new Date(p.createdAt||0).toLocaleDateString('ru-RU')}${p.tag==='before'?' (до)':p.tag==='after'?' (после)':''}`;
+    const opts=list.map(p=>`<option value="${p.id}">${esc(label(p))}</option>`).join('');
+    $('#baBeforeSel').innerHTML=opts||'<option value="">—</option>';
+    $('#baAfterSel').innerHTML=opts||'<option value="">—</option>';
+    const beforeGuess=list.find(p=>p.tag==='before')||list[0];
+    const afterGuess=list.find(p=>p.tag==='after')||list[list.length-1];
+    if(beforeGuess) $('#baBeforeSel').value=beforeGuess.id;
+    if(afterGuess) $('#baAfterSel').value=afterGuess.id;
+    renderBA();
+  }
+  function renderBA(){
+    const before=S.photos.find(p=>p.id===$('#baBeforeSel').value);
+    const after=S.photos.find(p=>p.id===$('#baAfterSel').value);
+    if(!before||!after){ $('#baViewer').innerHTML='<p class="dim small">Выберите два фото для сравнения.</p>'; return; }
+    $('#baViewer').innerHTML=`
+      <div id="baWrap" style="position:relative;width:100%;max-width:420px;aspect-ratio:1;border-radius:12px;overflow:hidden;border:1px solid var(--line-red);margin:0 auto;touch-action:pan-y">
+        <img src="${after.processedDataUrl||after.dataUrl}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+        <img id="baBeforeImg" src="${before.processedDataUrl||before.dataUrl}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;clip-path:inset(0 50% 0 0)">
+        <div id="baHandle" style="position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--red);box-shadow:0 0 8px var(--red-glow);pointer-events:none"></div>
+        <div class="small" style="position:absolute;top:6px;left:8px;background:rgba(0,0,0,.55);padding:2px 8px;border-radius:6px;pointer-events:none">до</div>
+        <div class="small" style="position:absolute;top:6px;right:8px;background:rgba(0,0,0,.55);padding:2px 8px;border-radius:6px;pointer-events:none">после</div>
+      </div>
+      <input type="range" id="baSlider" min="0" max="100" value="50" style="width:100%;max-width:420px;display:block;margin:10px auto 0">
+    `;
+    $('#baSlider').oninput=e=>{
+      const pct=e.target.value;
+      $('#baBeforeImg').style.clipPath='inset(0 '+(100-pct)+'% 0 0)';
+      $('#baHandle').style.left=pct+'%';
+    };
+  }
+  $('#baClientSel').onchange=fillSelects;
+  $('#baBeforeSel').onchange=renderBA;
+  $('#baAfterSel').onchange=renderBA;
+  fillSelects();
+}
+
+/* ====================== REPORTS (weekly review, local formulas, no AI) ====================== */
+/* ====================== АНКЕТЫ (отдельный раздел) ====================== */
+let consentFilter='all';
+RENDERERS.consents=function(){
+  const totalClients=S.clients.length;
+  const fullySignedCount=S.clients.filter(c=>Object.keys(CONSENT_TYPES).every(k=>S.consents.some(x=>x.clientId===c.id&&x.type===k))).length;
+  $('#content').innerHTML=`
+  <h2>Анкеты и согласия</h2>
+  <p class="small dim">Для каждого клиента — согласие на процедуру, согласие родителя (для лиц младше 18) и согласие на публикацию фото. Подпись ставится пальцем или мышью. После подписи документ можно отправить клиенту в PDF или распечатать.</p>
+  <div class="grid grid-3" style="margin:12px 0">
+    <div class="stat"><div class="num">${totalClients}</div><div class="lbl">Клиентов</div></div>
+    <div class="stat"><div class="num">${fullySignedCount}</div><div class="lbl">Все анкеты подписаны</div></div>
+    <div class="stat"><div class="num">${totalClients-fullySignedCount}</div><div class="lbl">Есть неподписанные</div></div>
+  </div>
+  <div class="tabbar" id="consentFilterTabs">
+    ${[['all','Все клиенты'],['missing','Есть неподписанные']].map(([f,l])=>`<button data-f="${f}" class="${consentFilter===f?'active':''}">${l}</button>`).join('')}
+  </div>
+  <input type="text" id="consentSearch" placeholder="Поиск клиента..." style="margin:10px 0">
+  <div id="consentList"></div>`;
+  $$('#consentFilterTabs button').forEach(b=>b.onclick=()=>{ consentFilter=b.dataset.f; RENDERERS.consents(); });
+  $('#consentSearch').oninput=e=>renderConsentList(e.target.value.trim().toLowerCase());
+  renderConsentList('');
+};
+function renderConsentList(q){
+  let list=S.clients.slice();
+  if(q) list=list.filter(c=>(c.name||'').toLowerCase().includes(q));
+  if(consentFilter==='missing') list=list.filter(c=>!Object.keys(CONSENT_TYPES).every(k=>S.consents.some(x=>x.clientId===c.id&&x.type===k)));
+  list.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  $('#consentList').innerHTML = list.length? list.map(c=>{
+    const rows=Object.entries(CONSENT_TYPES).map(([key,def])=>{
+      const rec=S.consents.filter(x=>x.clientId===c.id&&x.type===key).sort((a,b)=>(b.signedAt||0)-(a.signedAt||0))[0];
+      return `<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line);flex-wrap:wrap;gap:6px">
+        <span style="flex:1 1 100%">${def.label}</span>
+        <span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          ${rec?`<span class="badge badge-regular">${fmtDate(rec.signedAt)}</span><button class="btn btn-sm" onclick="downloadConsentPdf('${rec.id}')">PDF / печать</button>`:`<span class="badge badge-wait">не подписано</span>`}
+          <button class="btn btn-sm" onclick="openConsentForm('${c.id}','${key}')">${rec?'Переподписать':'Подписать'}</button>
+        </span>
+      </div>`;
+    }).join('');
+    return `<div class="card" style="margin-bottom:10px">
+      <div class="row" style="cursor:pointer" onclick="openClient('${c.id}','anketa')"><b>${esc(c.name)}</b><span class="small dim">${esc(c.phone)||''}</span></div>
+      <div style="margin-top:6px">${rows}</div>
+    </div>`;
+  }).join('') : '<p class="dim">Клиенты не найдены.</p>';
+}
+
+RENDERERS.reports=function(){
+  $('#content').innerHTML=`
+  <h2>Отчёты</h2>
+  <div class="card" style="margin-bottom:12px">
+    <h3>Еженедельный отчёт «Как прошла неделя?»</h3>
+    <p class="small dim">Формируется автоматически по локальным данным — без AI.</p>
+    <button class="btn btn-primary btn-sm" onclick="generateWeeklyReport()">Сформировать отчёт за неделю</button>
+  </div>
+  <div id="reportOut"></div>`;
+};
+function generateWeeklyReport(){
+  const now=new Date(); const start=new Date(now); start.setDate(now.getDate()-now.getDay()+1);
+  const s=start.toISOString().slice(0,10);
+  const weekEvents=S.events.filter(e=>e.date>=s);
+  const sessions=weekEvents.filter(e=>e.type==='session').length;
+  const consults=weekEvents.filter(e=>e.type==='consult').length;
+  const corrections=weekEvents.filter(e=>e.type==='correction').length;
+  const models=weekEvents.filter(e=>e.type==='model').length;
+  const newClients=S.clients.filter(c=>c.firstVisit>=s).length;
+  const revenue=S.finance.filter(f=>f.type==='income'&&f.date>=s).reduce((a,f)=>a+Number(f.amount||0),0);
+  const expenses=S.finance.filter(f=>f.type==='expense'&&f.date>=s).reduce((a,f)=>a+Number(f.amount||0),0);
+  const filmSales=S.healingFilmSales.filter(f=>f.date>=s).reduce((a,f)=>a+Number(f.amount||0),0);
+  const text=`Отчёт за неделю от ${fmtDate(s)}\n\nСеансы: ${sessions}\nКонсультации: ${consults}\nКоррекции: ${corrections}\nМодели: ${models}\nНовые клиенты: ${newClients}\nВыручка: ${fmtMoney(revenue)}\nРасходы: ${fmtMoney(expenses)}\nПродажи плёнки: ${fmtMoney(filmSales)}\nЧистая прибыль (предварительно): ${fmtMoney(revenue-expenses)}`;
+  const rev={id:uid(),date:todayISO(),weekStart:s,text};
+  idbPut('reminders',rev);
+  window._lastReportText=text;
+  window._lastReportSeries=[
+    {label:'Сеансы',value:sessions,color:'#20B2AA'},
