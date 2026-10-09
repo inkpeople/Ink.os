@@ -1,3 +1,561 @@
+=list.map(s=>`<div class="card" style="margin-bottom:8px"><h4>${esc(s.title)}</h4><p class="small dim">${esc(s.text)}</p></div>`).join('') || '<p class="dim">Ничего не найдено.</p>';
+}
+
+/* ====================== SETTINGS ====================== */
+RENDERERS.settings=function(){
+  const t=S.settings.thresholds||{...DEFAULT_THRESHOLDS};
+  window._threshT=t;
+  $('#content').innerHTML=`
+  <h2>Настройки</h2>
+  <div class="grid-auto">
+    <div class="card">
+      <h3>Профиль</h3>
+      <label>Имя (для приветствия на главном экране)</label>
+      <input id="ownerNameInput" value="${esc(S.settings.ownerName||'')}" placeholder="Мастер">
+      <label style="margin-top:10px">Валюта приложения</label>
+      <select id="currencySelect">
+        ${[['₽','₽ Рубль'],['$','$ Доллар'],['€','€ Евро'],['₸','₸ Тенге'],['₴','₴ Гривна'],['£','£ Фунт']].map(([sym,label])=>`<option value="${sym}" ${(S.settings.currency||'₽')===sym?'selected':''}>${label}</option>`).join('')}
+      </select>
+      <p class="small dim" style="margin-top:6px">Применяется ко всем суммам в приложении (дашборд, финансы, клиенты, события). Курс не пересчитывается — только меняется отображаемый символ.</p>
+    </div>
+    <div class="card">
+      <h3>Безопасность</h3>
+      <div class="row"><span>PIN-код</span><button class="btn btn-sm" onclick="showPinScreen('set')">${S.settings.pin?'Изменить PIN':'Задать PIN'}</button></div>
+      ${S.settings.pin?`<div class="row" style="margin-top:6px"><span>Отключить PIN</span><button class="btn btn-sm btn-danger" onclick="disablePin()">Отключить</button></div>`:''}
+      <div class="row" style="margin-top:10px"><span>Скрыть финансовые данные</span><input type="checkbox" id="hideFinanceChk" ${S.settings.hideFinance?'checked':''}></div>
+      <label style="margin-top:10px">Автоблокировка после бездействия (мин, 0 — выключено)</label>
+      <input type="number" id="autoLockInput" min="0" value="${S.settings.autoLockMinutes||0}">
+      <p class="small dim" style="margin-top:6px">Биометрия зависит от браузера/ОС — используйте PIN как основной способ защиты.</p>
+    </div>
+    <div class="card">
+      <h3>Логотип</h3>
+      <input type="file" id="logoInput" accept="image/png,image/svg+xml">
+      ${S.settings.logo?`<img src="${S.settings.logo}" style="max-width:120px;margin-top:8px;background:#222;border-radius:6px">`:''}
+      <p class="small dim">Добавляется только к обработанной копии фото.</p>
+    </div>
+  </div>
+  <div class="btn-row" style="margin-top:12px">
+    <button class="btn" onclick="openSettingsSheet('thresholds')">${icon('inventory')} Пороги склада</button>
+    <button class="btn" onclick="openSettingsSheet('purchase')">${icon('chart')} Закупка картриджей</button>
+    <button class="btn" onclick="openSettingsSheet('hours')">${icon('calendar')} Рабочие часы</button>
+    <button class="btn" onclick="openSettingsSheet('splash')">Заставка</button>
+    <button class="btn" onclick="openSettingsSheet('pwa')">Установка на экран</button>
+    <button class="btn btn-danger" onclick="openSettingsSheet('data')">Демо / удаление</button>
+  </div>`;
+  $('#ownerNameInput').onchange=async e=>{ S.settings.ownerName=e.target.value; await saveSettings(); toast('Сохранено'); };
+  $('#currencySelect').onchange=async e=>{ S.settings.currency=e.target.value; await saveSettings(); toast('Валюта изменена'); go('settings'); };
+  $('#hideFinanceChk').onchange=async e=>{ S.settings.hideFinance=e.target.checked; await saveSettings(); toast('Сохранено'); go('settings'); };
+  $('#autoLockInput').onchange=async e=>{ S.settings.autoLockMinutes=Number(e.target.value)||0; await saveSettings(); resetInactivityTimer(); toast('Сохранено'); };
+  $('#logoInput').onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const reader=new FileReader(); reader.onload=async ev=>{ S.settings.logo=ev.target.result; await saveSettings(); toast('Логотип сохранён'); go('settings'); }; reader.readAsDataURL(f);
+  };
+};
+function openSettingsSheet(kind){
+  const t=window._threshT||{...DEFAULT_THRESHOLDS};
+  if(kind==='thresholds'){
+    openSheet('Пороги склада', `<form id="thresholdForm">
+      ${Object.entries({cartridge:'Картриджи',transferPaper:'Трансферная бумага',pigmentBlack:'Чёрный пигмент',pigmentColor:'Цветной пигмент',pigmentGray:'Серый пигмент',pigmentWhite:'Белый пигмент',oil:'Масло/вазелин',foam:'Пенка',lidocainePrimary:'Ледокаин первичный',lidocaineSecondary:'Ледокаин вторичный',healingFilm:'Заживляющая плёнка'}).map(([k,label])=>`
+      <div class="row small"><span>${label}</span><input style="width:70px" type="number" name="${k}" value="${t[k]}"></div>`).join('')}
+      <button class="btn btn-primary btn-block" style="margin-top:10px" type="submit">Сохранить пороги</button>
+      </form>`);
+    $('#thresholdForm').onsubmit=async e=>{ e.preventDefault(); const fd=new FormData(e.target); const th={}; fd.forEach((v,k)=>th[k]=Number(v)); S.settings.thresholds=th; await saveSettings(); toast('Пороги сохранены'); closeSheet(); };
+  } else if(kind==='purchase'){
+    openSheet('Закупка картриджей', `<form id="purchaseSettingsForm">
+      <label>Срок поставки (дней)</label><input type="number" name="leadTimeDays" value="${S.settings.leadTimeDays||7}">
+      <label>Резерв (шт.)</label><input type="number" name="reserve" value="${S.settings.reserve||3}">
+      <button class="btn btn-primary btn-block" style="margin-top:10px" type="submit">Сохранить</button>
+      </form>`);
+    $('#purchaseSettingsForm').onsubmit=async e=>{ e.preventDefault(); const fd=new FormData(e.target); S.settings.leadTimeDays=Number(fd.get('leadTimeDays')); S.settings.reserve=Number(fd.get('reserve')); await saveSettings(); toast('Сохранено'); closeSheet(); };
+  } else if(kind==='hours'){
+    openSheet('Рабочие часы', `<form id="workHoursForm">
+      <div class="field-row"><div><label>Начало</label><input type="number" name="workHoursStart" value="${S.settings.workHoursStart||10}"></div><div><label>Конец</label><input type="number" name="workHoursEnd" value="${S.settings.workHoursEnd||20}"></div></div>
+      <button class="btn btn-primary btn-block" style="margin-top:10px" type="submit">Сохранить</button>
+      </form>`);
+    $('#workHoursForm').onsubmit=async e=>{ e.preventDefault(); const fd=new FormData(e.target); S.settings.workHoursStart=Number(fd.get('workHoursStart')); S.settings.workHoursEnd=Number(fd.get('workHoursEnd')); await saveSettings(); toast('Сохранено'); closeSheet(); };
+  } else if(kind==='splash'){
+    openSheet('Заставка', `<select id="splashSelect">
+      <option value="full" ${S.settings.splash==='full'?'selected':''}>Полная</option>
+      <option value="short" ${S.settings.splash==='short'?'selected':''}>Короткая</option>
+      <option value="off" ${S.settings.splash==='off'?'selected':''}>Отключить</option>
+      </select>`);
+    $('#splashSelect').onchange=async e=>{ S.settings.splash=e.target.value; await saveSettings(); toast('Сохранено'); };
+  } else if(kind==='pwa'){
+    openPwaInstallSheet();
+  } else if(kind==='data'){
+    openSheet('Демо-данные и удаление', `
+      <button class="btn btn-block" style="margin-bottom:8px" onclick="closeSheet();seedDemoData()">Загрузить демо-данные</button>
+      <button class="btn btn-block btn-danger" onclick="closeSheet();wipeAllData()">Удалить все данные</button>`);
+  }
+}
+function disablePin(){ S.settings.pin=null; saveSettings(); toast('PIN отключён'); go('settings'); }
+function wipeAllData(){
+  confirmDialog('Удалить ВСЕ данные приложения безвозвратно? Рекомендуем сначала сделать резервную копию.',async()=>{
+    for(const store of STORES){
+      if(store==='settings') continue;
+      const items=S[store]||[];
+      for(const it of items) await idbDel(store,it.id);
+      S[store]=[];
+    }
+    localStorage.removeItem('inkos_fallback_db');
+    closeModal(); toast('Все данные удалены'); go('dashboard');
+  });
+}
+
+/* ====================== DEMO DATA ====================== */
+async function seedDemoData(){
+  const c1={id:uid(),name:'Анна Смирнова',phone:'+7 900 111-22-33',instagram:'@anna_ink',city:'Москва',country:'Россия',firstVisit:'2025-02-10',lastVisit:'2026-08-01',visits:3,totalSum:45000,source:'Instagram',styles:'Минимализм',zones:'Предплечье',status:'Постоянный',quickNotes:['Любит поговорить','Хочет продолжить проект']};
+  const c2={id:uid(),name:'Игорь Петров',phone:'+7 900 222-33-44',instagram:'@igor_p',city:'Рига',country:'Латвия',firstVisit:'2024-05-20',lastVisit:'2025-12-15',visits:5,totalSum:120000,source:'Рекомендация',styles:'Чёрно-серый реализм',zones:'Спина',status:'VIP',quickNotes:['Предпочитает тишину']};
+  const c3={id:uid(),name:'Мария Ковалёва',phone:'+7 900 333-44-55',instagram:'@maria_k',city:'Санкт-Петербург',country:'Россия',firstVisit:'2026-06-01',lastVisit:'2026-06-01',visits:1,totalSum:15000,source:'Guest Spot',styles:'Флэш',zones:'Кисть',status:'Новый',quickNotes:['Хочет музыку']};
+  const c4={id:uid(),name:'Дмитрий Орлов',phone:'+7 900 444-55-66',city:'Рига',country:'Латвия',firstVisit:'2025-01-01',lastVisit:'2025-06-01',visits:2,totalSum:30000,source:'Instagram',styles:'Традишнл',zones:'Плечо',status:'Давно не был',quickNotes:[]};
+  for(const c of [c1,c2,c3,c4]) await idbPut('clients',c);
+  S.clients.push(c1,c2,c3,c4);
+
+  const today=todayISO();
+  const ev1={id:uid(),type:'session',date:today,start:'12:00',end:'15:00',clientId:c1.id,cost:20000,status:'planned',comment:'Продолжение рукава'};
+  const ev2={id:uid(),type:'consult',date:today,start:'16:30',end:'17:00',clientId:c3.id,cost:0,status:'planned'};
+  const d2=new Date(); d2.setDate(d2.getDate()+2);
+  const ev3={id:uid(),type:'session',date:d2.toISOString().slice(0,10),start:'11:00',end:'14:00',clientId:c2.id,cost:35000,status:'planned'};
+  const d5=new Date(); d5.setDate(d5.getDate()+5);
+  const ev4={id:uid(),type:'dayoff',date:d5.toISOString().slice(0,10),start:'',end:''};
+  const dPast=new Date(); dPast.setDate(dPast.getDate()-10);
+  const ev5={id:uid(),type:'session',date:dPast.toISOString().slice(0,10),start:'12:00',end:'15:00',clientId:c1.id,cost:20000,status:'completed',style:'Минимализм'};
+  for(const e of [ev1,ev2,ev3,ev4,ev5]) await idbPut('events',e);
+  S.events.push(ev1,ev2,ev3,ev4,ev5);
+
+  const fin1={id:uid(),type:'income',category:'tattoo',amount:20000,date:dPast.toISOString().slice(0,10),comment:'Сеанс Анна'};
+  const fin2={id:uid(),type:'expense',category:'cartridges',amount:3500,date:dPast.toISOString().slice(0,10),comment:'Закупка картриджей'};
+  const fin3={id:uid(),type:'income',category:'training',amount:25000,date:today,comment:'Оплата обучения'};
+  for(const f of [fin1,fin2,fin3]) await idbPut('finance',f); S.finance.push(fin1,fin2,fin3);
+
+  const inv=[
+    {id:uid(),category:'cartridge',config:'RL',size:'1203',name:'Картридж RL 1203',qty:8,threshold:10,unit:'шт.',brand:'Bunny'},
+    {id:uid(),category:'cartridge',config:'RS',size:'1005',name:'Картридж RS 1005',qty:15,threshold:10,unit:'шт.',brand:'Bunny'},
+    {id:uid(),category:'cartridge',config:'M1',size:'1207',name:'Картридж M1 1207',qty:6,threshold:10,unit:'шт.',brand:'Cheyenne'},
+    {id:uid(),category:'pigment',name:'Чёрный',qty:3,threshold:2,unit:'флаконов'},
+    {id:uid(),category:'pigment',name:'Цветной',qty:1,threshold:2,unit:'флаконов'},
+    {id:uid(),category:'material',name:'Трансферная бумага',qty:19,threshold:20,unit:'листов'},
+    {id:uid(),category:'material',name:'Заживляющая плёнка',qty:12,threshold:10,unit:'ед.'},
+    {id:uid(),category:'material',name:'Ледокаин первичный',qty:2,threshold:2,unit:'шт.'}
+  ];
+  for(const i of inv) await idbPut('inventory',i); S.inventory.push(...inv);
+
+  const cu1={id:uid(),config:'RL',size:'1203',qty:3,date:dPast.toISOString().slice(0,10),context:'session',eventId:ev5.id};
+  const cu2={id:uid(),config:'RS',size:'1005',qty:2,date:dPast.toISOString().slice(0,10),context:'session',eventId:ev5.id};
+  await idbPut('cartridgeUsage',cu1); await idbPut('cartridgeUsage',cu2); S.cartridgeUsage.push(cu1,cu2);
+
+  const st1={id:uid(),name:'Елена Волкова',city:'Рига',startDate:'2026-03-01',program:'Базовое обучение',cost:80000,level:'Начинающий',goals:'Освоить постановку руки'};
+  await idbPut('students',st1); S.students.push(st1);
+  const hw1={id:uid(),studentId:st1.id,title:'Постановка руки: линии',description:'Нарисуйте 5 листов прямых и волнистых линий разной толщины.',deadline:(()=>{const d=new Date();d.setDate(d.getDate()+3);return d.toISOString().slice(0,10);})(),status:'На проверке',createdAt:Date.now()};
+  await idbPut('homework',hw1); S.homework.push(hw1);
+
+  const gs1={id:uid(),city:'Барселона',place:'Studio X',dateStart:(()=>{const d=new Date();d.setDate(d.getDate()+20);return d.toISOString().slice(0,10);})(),dateEnd:(()=>{const d=new Date();d.setDate(d.getDate()+24);return d.toISOString().slice(0,10);})(),materialsPlanned:{'Картриджи':20,'Трансферная бумага':15},closed:false};
+  await idbPut('guestSpots',gs1); S.guestSpots.push(gs1);
+
+  const t1={id:uid(),text:'Проверить домашнее задание Елены',date:today,done:false};
+  await idbPut('tasks',t1); S.tasks.push(t1);
+
+  S.settings._seeded=true; await saveSettings();
+  toast('Демо-данные загружены');
+  computeAutoNotifications();
+  go(currentRoute||'dashboard');
+}
+
+/* ====================== PWA: manifest + service worker (best effort) ====================== */
+let deferredInstallPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferredInstallPrompt=e; if(currentRoute==='settings') go('settings'); });
+function generateAppIcon(){
+  try{
+    const c=document.createElement('canvas'); c.width=512; c.height=512; const x=c.getContext('2d');
+    x.fillStyle='#050506'; x.fillRect(0,0,512,512);
+    x.strokeStyle='#ff2036'; x.shadowColor='#ff2036'; x.shadowBlur=18; x.lineWidth=5; x.beginPath(); x.moveTo(256,0); x.lineTo(256,96); x.stroke();
+    x.textAlign='center'; x.textBaseline='middle'; x.shadowBlur=0; x.fillStyle='#fff'; x.font='900 170px Arial,sans-serif'; x.fillText('INK',256,215);
+    x.shadowColor='#ff2036'; x.shadowBlur=30; x.fillStyle='#ff2036'; x.font='900 128px Arial,sans-serif'; x.fillText('.OS',256,350);
+    return c.toDataURL('image/png');
+  }catch(e){ return null; }
+}
+(function setupManifest(){
+  try{
+    const iconUrl=generateAppIcon();
+    const icons=iconUrl?[
+      {src:iconUrl,sizes:'512x512',type:'image/png',purpose:'any'},
+      {src:iconUrl,sizes:'512x512',type:'image/png',purpose:'maskable'}
+    ]:[];
+    const manifest={name:'INK.OS — Tattoo Business Assistant',short_name:'INK.OS',start_url:'.',id:'.',display:'standalone',background_color:'#050506',theme_color:'#050506',icons};
+    const blob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
+    document.getElementById('manifestLink').href=location.protocol.startsWith('http')?'manifest.webmanifest':URL.createObjectURL(blob);
+    if(iconUrl){ ['appleIcon','favIcon'].forEach(id=>{ const l=document.getElementById(id); if(l) l.href=iconUrl; }); }
+  }catch(e){}
+})();
+// Service worker (sw.js рядом с index.html) работает только при открытии по https.
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  try{
+    navigator.serviceWorker.register(new URL('sw.js',document.baseURI)).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
+  }catch(e){}
+}
+
+
+/* ====================== ADAPTIVE: back button, keyboard, storage ====================== */
+let _sentinel=false,_ignorePop=0,_popT=null;
+function anyLayerOpen(){ return $('#modalOverlay').classList.contains('open')||$('#genericSheetOverlay').classList.contains('open')||$('#moreSheet').style.display==='flex'; }
+function ensureSentinel(){ if(_sentinel) return; try{ history.pushState({ink:1},''); _sentinel=true; }catch(e){} }
+function releaseSentinel(){ clearTimeout(_popT); _popT=setTimeout(()=>{ if(_sentinel&&!anyLayerOpen()){ _sentinel=false; _ignorePop++; try{ history.back(); }catch(e){ _ignorePop=0; } setTimeout(()=>{_ignorePop=0},700); } },40); }
+function closeTopLayer(){
+  if($('#genericSheetOverlay').classList.contains('open')) closeSheet();
+  else if($('#moreSheet').style.display==='flex') closeMoreSheet();
+  else if($('#modalOverlay').classList.contains('open')) closeModal();
+}
+(function(){
+  const wrap=(name,after)=>{ const f=window[name]; window[name]=function(){ const r=f.apply(this,arguments); after(); return r; }; };
+  ['openModal','openSheet','openMoreSheet'].forEach(n=>wrap(n,ensureSentinel));
+  ['closeModal','closeSheet','closeMoreSheet'].forEach(n=>wrap(n,releaseSentinel));
+})();
+window.addEventListener('popstate',()=>{
+  if(_ignorePop>0){ _ignorePop--; return; }
+  if(!_sentinel) return;
+  _sentinel=false; closeTopLayer();
+  if(anyLayerOpen()) ensureSentinel();
+});
+document.addEventListener('keydown',e=>{
+  const tag=(e.target&&e.target.tagName||'').toLowerCase(), typing=['input','textarea','select'].includes(tag);
+  if(e.key==='Escape'){ if(anyLayerOpen()){ e.preventDefault(); closeTopLayer(); } return; }
+  if(e.altKey&&/^Digit[1-6]$/.test(e.code)){ e.preventDefault(); go(['dashboard','calendar','clients','projects','finance','inventory'][+e.code.slice(5)-1]); return; }
+  if(typing||e.ctrlKey||e.metaKey||e.altKey||$('#splash').style.display!=='none'&&$('#splash').offsetParent!==null) return;
+  if(e.key==='/'){ e.preventDefault(); if(typeof openGlobalSearch==='function') openGlobalSearch(); }
+  else if(e.key==='n'||e.key==='т'){ e.preventDefault(); openEventForm(null,{type:'session'}); }
+});
+try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+(function(){ const _rs=RENDERERS.settings; RENDERERS.settings=function(){ _rs.apply(this,arguments);
+  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+  if(ios&&!standalone) $('#content').insertAdjacentHTML('afterbegin','<div class="cl-card"><div class="cl-lbl">Установка на iPhone / iPad</div><p class="small" style="margin:0">Откройте приложение в Safari → «Поделиться» → «На экран Домой». Так оно откроется без адресной строки, на весь экран.</p></div>');
+  $('#content').insertAdjacentHTML('beforeend','<div class="cl-card" style="margin-top:12px"><div class="cl-lbl">Горячие клавиши (компьютер)</div><p class="small dim" style="margin:0;line-height:1.7">Esc — закрыть окно · N — новая запись · / — поиск · Alt+1…6 — разделы</p></div>');
+}; })();
+
+
+/* ====================== NEW SECTION DESIGNS ====================== */
+function plural(n,a,b,c){ const m=n%10,h=n%100; return n+' '+((m===1&&h!==11)?a:([2,3,4].includes(m)&&![12,13,14].includes(h))?b:c); }
+const RU_CITIES=new Set('москва,санкт-петербург,спб,новосибирск,екатеринбург,казань,нижний новгород,челябинск,самара,омск,ростов-на-дону,уфа,красноярск,воронеж,пермь,волгоград,краснодар,саратов,тюмень,тольятти,ижевск,барнаул,ульяновск,иркутск,хабаровск,ярославль,владивосток,махачкала,томск,оренбург,кемерово,новокузнецк,рязань,астрахань,пенза,липецк,киров,калининград,тула,курск,севастополь,сочи,ставрополь,тверь,иваново,брянск,белгород,сургут,владимир,чебоксары,калуга,смоленск,мурманск,петрозаводск,архангельск,вологда,псков'.split(','));
+let citiesState={tab:'all',q:''};
+function cityStats(){ const m={}; const add=c=>{ const k=(c||'').trim(); return k?(m[k]=m[k]||{city:k,trips:0,clients:0,ru:RU_CITIES.has(k.toLowerCase())}):null; };
+  S.clients.forEach(c=>{ const r=add(c.city); if(r) r.clients++; }); S.guestSpots.forEach(g=>{ const r=add(g.city); if(r) r.trips++; });
+  return Object.values(m).sort((a,b)=>(b.trips+b.clients)-(a.trips+a.clients)); }
+function hue(str){ let h=0; for(const ch of str) h=(h*31+ch.charCodeAt(0))%360; return h; }
+RENDERERS.cities=function(){
+  const list=cityStats().filter(r=>(citiesState.tab==='all'||(citiesState.tab==='ru')===r.ru)&&r.city.toLowerCase().includes(citiesState.q));
+  $('#content').innerHTML=`<input class="search2" id="ctQ" placeholder="Поиск города…" value="${esc(citiesState.q)}">
+  <div class="chips">${[['all','Все'],['ru','Россия'],['world','Зарубежье']].map(t=>`<button class="${citiesState.tab===t[0]?'on':''}" data-t="${t[0]}">${t[1]}</button>`).join('')}</div>
+  <div>${list.map(r=>{ const h=hue(r.city); return `<div class="row2" onclick="openCity(${jattr(r.city)})"><span class="city-ph" style="background:linear-gradient(135deg,hsl(${h} 50% 32%),hsl(${(h+40)%360} 55% 10%))">${esc(r.city[0].toUpperCase())}</span><div class="b"><b>${esc(r.city)}</b><span class="dim small">${plural(r.trips,'поездка','поездки','поездок')} · ${plural(r.clients,'клиент','клиента','клиентов')}</span></div>${icon('chevron')}</div>`; }).join('')||'<p class="dim">Городов пока нет. Они появятся из поля «Город» у клиентов и из поездок Guest Spot.</p>'}</div>`;
+  $('#ctQ').oninput=e=>{ citiesState.q=e.target.value.toLowerCase(); const v=e.target.value; RENDERERS.cities(); const i=$('#ctQ'); i.focus(); i.setSelectionRange(v.length,v.length); };
+  $$('.chips [data-t]').forEach(b=>b.onclick=()=>{ citiesState.tab=b.dataset.t; RENDERERS.cities(); });
+};
+function openCity(city){
+  const k=city.toLowerCase(), trips=S.guestSpots.filter(g=>(g.city||'').toLowerCase()===k), cl=S.clients.filter(c=>(c.city||'').toLowerCase()===k);
+  openSheet(city,`<div class="cl-lbl">Поездки</div>${trips.map(g=>`<div class="row2" onclick="closeSheet();openGuestSpotForm(${jattr(g.id)})"><div class="b"><b>${esc(g.place||g.city)}</b><span class="dim small">${fmtDate(g.dateStart)} – ${fmtDate(g.dateEnd)}</span></div>${icon('chevron')}</div>`).join('')||'<p class="dim small">Поездок не было.</p>'}
+  <div class="cl-lbl" style="margin-top:14px">Клиенты</div>${cl.map(c=>`<div class="row2" onclick="closeSheet();openClient('${c.id}')">${clientAvatarHtml(c)}<div class="b"><b>${esc(c.name)}</b></div>${icon('chevron')}</div>`).join('')||'<p class="dim small">Клиентов из этого города нет.</p>'}`);
+}
+
+(function(){ const _d=RENDERERS.data; RENDERERS.data=function(){ _d.apply(this,arguments);
+  const inc=(S.finance||[]).filter(f=>f.type==='income').reduce((a,f)=>a+Number(f.amount||0),0);
+  const rows=[['clients','Клиенты',S.clients.length,'clients'],['guestspot','Поездки (Guest Spot)',S.guestSpots.length,'guestspot'],['cities','Города',cityStats().length,'cities'],['projects','Проекты',S.projects.length,'projects'],['finance','Финансы',fmtMoney(inc),'finance'],['consents','Документы (анкеты)',(S.consents||[]).length,'consents'],['tasks','Задачи',(S.tasks||[]).length,'dashboard']];
+  $('#content').insertAdjacentHTML('afterbegin',`<div class="cl-card" style="margin-bottom:14px">${rows.map(r=>`<div class="row2" onclick="go('${r[3]}')"><span>${icon(r[0])}</span><div class="b" style="font-size:15.5px">${r[1]}</div><b>${r[2]}</b></div>`).join('')}</div>`);
+}; })();
+
+RENDERERS.help=function(){
+  $('#content').innerHTML=`<input class="search2" id="helpSearch" placeholder="Поиск по вопросам…" style="margin-bottom:12px"><div id="helpList"></div>`;
+  $('#helpSearch').oninput=e=>renderHelpList(e.target.value.toLowerCase()); renderHelpList('');
+};
+function renderHelpList(q){
+  const l=HELP_SECTIONS.filter(x=>!q||x.title.toLowerCase().includes(q)||x.text.toLowerCase().includes(q));
+  $('#helpList').innerHTML=l.map(x=>`<details class="faq"><summary>${esc(x.title)}</summary><p>${esc(x.text)}</p></details>`).join('')||'<p class="dim">Ничего не найдено.</p>';
+}
+
+let clTab='clients';
+function renderClientsList(){
+  const q=(clientFilter.q||'').toLowerCase();
+  const lastOf=id=>S.events.filter(e=>e.clientId===id&&e.status==='completed').map(e=>e.date).sort().pop()||'';
+  let arr=S.clients.map(c=>({c,last:lastOf(c.id),pr:S.projects.filter(p=>p.clientId===c.id).length}));
+  const pot=x=>!x.last&&!Number(x.c.visits||0);
+  const nPot=arr.filter(pot).length;
+  arr=arr.filter(x=>(clTab==='pot')===pot(x)).filter(x=>(!clientFilter.status||x.c.status===clientFilter.status)&&(!q||[x.c.name,x.c.phone,x.c.instagram,x.c.city].some(v=>(v||'').toLowerCase().includes(q))));
+  const sort=clientFilter.sort; arr.sort((a,b)=>sort==='last'?b.last.localeCompare(a.last):sort==='sum'?Number(b.c.totalSum||0)-Number(a.c.totalSum||0):(a.c.name||'').localeCompare(b.c.name||''));
+  $('#clientsList').innerHTML=`<div class="chips"><button class="${clTab==='clients'?'on':''}" onclick="clTab='clients';renderClientsList()">Клиенты</button><button class="${clTab==='pot'?'on':''}" onclick="clTab='pot';renderClientsList()">Потенциальные${nPot?' · '+nPot:''}</button></div>
+  ${arr.map(x=>{ const col=clientStatusColor(x.c.status); return `<div class="row2" onclick="openClient('${x.c.id}')">${clientAvatarHtml(x.c)}<div class="b"><b>${esc(x.c.name)}</b><span class="dim small">${x.last?fmtDate(x.last)+' · ':''}${plural(x.pr,'проект','проекта','проектов')}</span><span class="st" style="color:${col}"><i style="background:${col}"></i>${esc(x.c.status||'Без статуса')}</span></div>${icon('chevron')}</div>`; }).join('')||'<p class="dim">Никого нет.</p>'}`;
+}
+
+/* ===== analytics: tabs, periods, deltas, area chart ===== */
+let anPeriod='30', anTab='an';
+const dpct=(a,b)=>b?Math.round((a-b)/b*100):(a?100:0);
+const dlt=d=>`<span class="dlt ${d>=0?'up':'dn'}">${d>=0?'↑':'↓'} ${Math.abs(d)}%</span>`;
+function anStats(f,t){
+  const fin=(S.finance||[]).filter(x=>x.date>=f&&x.date<=t), sm=a=>a.reduce((n,x)=>n+Number(x.amount||0),0);
+  const inc=sm(fin.filter(x=>x.type==='income')), exp=sm(fin.filter(x=>x.type!=='income'));
+  const ev=S.events.filter(e=>e.status==='completed'&&e.date>=f&&e.date<=t);
+  return {inc,exp,clients:new Set(ev.map(e=>e.clientId).filter(Boolean)).size,avg:ev.length?inc/ev.length:0,net:inc-exp-inc*Number(S.settings.taxRate||0)/100};
+}
+RENDERERS.analytics=function(){
+  const days={'7':7,'30':30,'90':90,'365':365}[anPeriod], iso=d=>d.toISOString().slice(0,10), today=new Date();
+  const shift=(d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
+  const from=shift(today,-(days-1)), cur=anStats(iso(from),iso(today)), prev=anStats(iso(shift(from,-days)),iso(shift(from,-1)));
+  const head=`<div class="chips" style="margin-top:0">${[['an','Аналитика'],['plan','Цель'],['tax','Налоги']].map(t=>`<button class="${anTab===t[0]?'on':''}" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div>`;
+  let body='';
+  if(anTab==='an'){
+    const n=days<=7?7:days>=365?12:6, size=days/n, vals=[], labs=[];
+    for(let i=0;i<n;i++){ const a=iso(shift(from,Math.round(i*size))), b=iso(shift(from,Math.round((i+1)*size)-1)); vals.push((S.finance||[]).filter(x=>x.type==='income'&&x.date>=a&&x.date<=b).reduce((q,x)=>q+Number(x.amount||0),0)); labs.push(a.slice(8)+'.'+a.slice(5,7)); }
+    const mx=Math.max(1,...vals), X=i=>10+i*320/(n-1), Y=v=>120-v/mx*100, pts=vals.map((v,i)=>[X(i),Y(v)]);
+    const line=pts.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' ');
+    const chart=`<svg viewBox="0 0 340 150" style="width:100%"><defs><linearGradient id="anG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e11f2b" stop-opacity=".55"/><stop offset="1" stop-color="#e11f2b" stop-opacity="0"/></linearGradient></defs><path d="${line} L330 120 L10 120Z" fill="url(#anG)"/><path d="${line}" fill="none" stroke="#ff3d47" stroke-width="2"/>${pts.map(q=>`<circle cx="${q[0]}" cy="${q[1]}" r="3" fill="#ff3d47"/>`).join('')}${labs.map((l,i)=>(n>7&&false)||i%(n>7?2:1)?'':`<text x="${X(i)}" y="141" font-size="9" fill="#777" text-anchor="middle">${l}</text>`).join('')}</svg>`;
+    body=`<div class="chips">${[['7','7 дней'],['30','30 дней'],['90','90 дней'],['365','Год']].map(t=>`<button class="${anPeriod===t[0]?'on':''}" data-p="${t[0]}">${t[1]}</button>`).join('')}</div>
+    <div class="stat2"><div><small>Доход</small><b>${fmtMoney(cur.inc)}</b>${dlt(dpct(cur.inc,prev.inc))}</div><div><small>Клиенты</small><b>${cur.clients}</b>${dlt(dpct(cur.clients,prev.clients))}</div><div><small>Средний чек</small><b>${fmtMoney(Math.round(cur.avg))}</b>${dlt(dpct(cur.avg,prev.avg))}</div><div><small>Чистая прибыль</small><b>${fmtMoney(Math.round(cur.net))}</b>${dlt(dpct(cur.net,prev.net))}</div></div>
+    <div class="cl-card"><div class="cl-lbl">Динамика дохода</div>${chart}</div>`;
+  } else if(anTab==='plan'){
+    body=planHtml();
+  } else {
+    const rate=Number(S.settings.taxRate||0), goal=Number(S.settings.monthGoal||0), ms=anStats(iso(new Date(today.getFullYear(),today.getMonth(),1)),iso(today)), pct=goal?Math.min(100,Math.round(ms.inc/goal*100)):0;
+    body=`<div class="cl-card"><div class="cl-lbl">Налоги — текущий месяц</div><div class="an-big">${fmtMoney(ms.inc*rate/100)}</div><div class="small dim">отложить при ставке ${rate}% с дохода ${fmtMoney(ms.inc)}</div>
+    ${goal?`<div class="cl-lbl" style="margin-top:12px">Цель ${fmtMoney(goal)} — ${pct}%</div><div class="pj-bar"><div style="width:${pct}%"></div></div>`:''}
+    <div class="field-row" style="margin-top:12px"><div><label>Ставка налога, %</label><input type="number" id="anRate" min="0" max="100" step="0.5" value="${rate}"></div><div><label>Цель на месяц</label><input type="number" id="anGoal" min="0" value="${goal||''}"></div></div>
+    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm btn-primary" id="anSave">Сохранить</button><button class="btn btn-sm" onclick="exportAccountant('month')">CSV за месяц</button><button class="btn btn-sm" onclick="exportAccountant('year')">CSV за год</button></div></div>`;
+  }
+  $('#content').innerHTML=head+body;
+  if(anTab==='plan') bindPlan();
+  $$('[data-tab]').forEach(b=>b.onclick=()=>{ anTab=b.dataset.tab; RENDERERS.analytics(); });
+  $$('[data-p]').forEach(b=>b.onclick=()=>{ anPeriod=b.dataset.p; RENDERERS.analytics(); });
+  if($('#anSave')) $('#anSave').onclick=async()=>{ S.settings.taxRate=Number($('#anRate').value||0); S.settings.monthGoal=Number($('#anGoal').value||0); await saveSettings(); toast('Сохранено'); RENDERERS.analytics(); };
+};
+
+(function(){ const _r=RENDERERS.reports; RENDERERS.reports=function(){ _r.apply(this,arguments);
+  const ym=todayISO().slice(0,7), fin=(S.finance||[]).filter(f=>(f.date||'').startsWith(ym)), sm=a=>a.reduce((n,x)=>n+Number(x.amount||0),0);
+  const inc=sm(fin.filter(f=>f.type==='income')), ex=fin.filter(f=>f.type!=='income'), exp=sm(ex), cat={};
+  ex.forEach(f=>{ const k=f.category||'Прочее'; cat[k]=(cat[k]||0)+Number(f.amount||0); });
+  const rows=Object.entries(cat).sort((a,b)=>b[1]-a[1]).slice(0,5), cols=['#e11f2b','#8e8e99','#f1c40f','#3ddc84','#7b3fe4']; let acc=0;
+  const grad=rows.map((r,i)=>{ const a=acc/exp*100; acc+=r[1]; return `${cols[i]} ${a}% ${acc/exp*100}%`; }).join(',');
+  $('#content').insertAdjacentHTML('afterbegin',`<div class="stat2"><div><small>Доход</small><b>${fmtMoney(inc)}</b></div><div><small>Расходы</small><b>${fmtMoney(exp)}</b></div></div>
+  <div class="cl-card"><div class="cl-lbl">Категории расходов</div>${rows.length?`<div style="display:flex;align-items:center;gap:16px"><div class="donut" style="background:conic-gradient(${grad})"></div><div class="leg">${rows.map((r,i)=>`<div><i style="background:${cols[i]}"></i><span>${esc(r[0])}</span><b>${Math.round(r[1]/exp*100)}%</b></div>`).join('')}</div></div>`:'<p class="dim small">В этом месяце расходов нет.</p>'}</div>
+  <button class="ev-finish" onclick="exportAccountant('month')">Скачать отчёт (CSV)</button>`);
+}; })();
+
+
+/* ====================== MENTORING (new design) ====================== */
+let trainTab='students';
+const shortName=n=>{ const p=(n||'').trim().split(/\s+/); return p.length>1?p[0]+' '+p[1][0].toUpperCase()+'.':(n||''); };
+RENDERERS.training=function(){
+  $('#content').innerHTML=`<div class="chips" style="margin-top:0" id="trainTabs"><button data-t="students" class="${trainTab==='students'?'on':''}">Ученики</button><button data-t="homework" class="${trainTab==='homework'?'on':''}">Домашние задания</button></div><div id="trainBody"></div>`;
+  $$('#trainTabs button').forEach(b=>b.onclick=()=>{ trainTab=b.dataset.t; RENDERERS.training(); });
+  renderTrainBody(trainTab);
+};
+function renderTrainBody(tab){
+  const body=$('#trainBody');
+  if(tab==='students'){
+    const stats=st=>{ const hw=S.homework.filter(h=>h.studentId===st.id), done=hw.filter(h=>h.status==='Принято').length; return {done,total:hw.length,pct:hw.length?Math.round(done/hw.length*100):0}; };
+    const today=todayISO();
+    const lessons=S.events.filter(e=>e.studentId&&e.date>=today&&e.status!=='cancelled').sort((a,b)=>(a.date+(a.start||'')).localeCompare(b.date+(b.start||''))).slice(0,3);
+    const hwNext=S.homework.filter(h=>h.status!=='Принято').sort((a,b)=>(a.deadline||'9').localeCompare(b.deadline||'9'))[0];
+    const hwSt=hwNext&&S.students.find(x=>x.id===hwNext.studentId);
+    const dayTxt=d=>{ const t=new Date(d+'T00:00').toLocaleDateString('ru-RU',{weekday:'short',day:'2-digit',month:'2-digit'}); return t[0].toUpperCase()+t.slice(1); };
+    body.innerHTML=`<div class="mt-head" style="margin-top:6px"><h3>Мои ученики</h3><button class="btn-red-o" onclick="openStudentForm()">${icon('plus')} Добавить</button></div>
+    ${S.students.map(st=>{ const k=stats(st); return `<div class="stu" onclick="openStudent('${st.id}')">${clientAvatarHtml(st)}<div class="mid"><b>${esc(shortName(st.name))}</b><div class="small dim">${esc(st.program||'Курс')} · ${k.done}/${k.total}</div><div class="stu-row"><div class="stu-bar"><div style="width:${k.pct}%"></div></div><span>${k.pct}%</span></div></div>${icon('chevron')}</div>`; }).join('')||'<p class="dim">Учеников пока нет.</p>'}
+    ${lessons.length?`<div class="mt-head"><h3>Ближайшие занятия</h3></div><div class="cl-card lessons">${lessons.map(e=>{ const st=S.students.find(x=>x.id===e.studentId); return `<div class="l" onclick="openEventView('${e.id}')"><span>${dayTxt(e.date)}</span><span>${e.start||''}</span><span>${esc(shortName(st&&st.name||''))}${e.title||e.zone?' — '+esc(e.title||e.zone):''}</span></div>`; }).join('')}</div>`:''}
+    ${hwNext?`<div class="mt-head"><h3>Домашнее задание</h3></div><div class="hw-hero" onclick="trainTab='homework';RENDERERS.training()">${hwSt?clientAvatarHtml(hwSt):''}<div class="b"><b>${esc(shortName(hwSt&&hwSt.name||''))}</b><div class="small">${esc(hwNext.title||'Задание')}</div><div class="small dim">Срок: ${hwNext.deadline?new Date(hwNext.deadline+'T00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'long'}):'не задан'}</div></div>${icon('chevron')}</div>`:''}`;
+  } else {
+    body.innerHTML=`<div class="mt-head" style="margin-top:6px"><h3>Задания</h3><button class="btn-red-o" onclick="openHomeworkForm()">${icon('plus')} Задание</button></div>`+
+    (S.homework.length?S.homework.slice().sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)).map(h=>`
+      <div class="cl-card"><div class="row"><b>${esc(h.title||'Задание')}</b><span class="badge ${h.status==='Просрочено'?'badge-lost':(h.status==='Принято'?'badge-regular':'badge-wait')}">${esc(h.status)}</span></div>
+      <div class="small dim">${esc(studentName(h.studentId))} · срок: ${fmtDate(h.deadline)}</div>${h.description?`<div class="small" style="margin-top:6px">${esc(h.description)}</div>`:''}
+      <div class="row" style="margin-top:10px;gap:8px"><select onchange="setHomeworkStatus('${h.id}',this.value)">${HOMEWORK_STATUSES.map(st=>`<option ${h.status===st?'selected':''}>${st}</option>`).join('')}</select><button class="btn btn-sm" onclick="shareHomeworkText('${h.id}')">Поделиться</button></div></div>`).join(''):'<p class="dim">Заданий нет.</p>');
+  }
+}
+
+
+/* ====================== SMART NOTIFICATIONS ====================== */
+const NOTIFY_TYPES=['session','consult','correction','model','study','university'];
+const NOTIF_OPTS=[['h24','Напоминание за сутки до события'],['h2','Напоминание за 2 часа до события'],['dayOf','В день события (утром)'],['write','Написать клиенту: уход, заживление, давно не был'],['stock','Склад: заканчиваются материалы'],['restock','Склад: ежедневная сводка «пора пополнить»'],['expenses','Вечером: внести расходы за день'],['tips','Подсказки по работе с приложением']];
+const TIPS=['После сеанса отправьте клиенту инструкцию по уходу: откройте запись и нажмите «Инструкция по уходу».','Нажмите на аватарку клиента, чтобы добавить фото — оно появится в карточке.','Эскиз можно нарисовать пальцем прямо в записи: блок «Референсы и эскизы» → «Эскиз».','Раз в неделю делайте резервную копию в разделе «Данные» — данные хранятся только на устройстве.','В «Аналитика и налоги» задайте цель на месяц и ставку налога — увидите, сколько отложить.','В Guest Spot укажите расходы на поездку — приложение покажет, окупилась ли она.','«Добавить расход» на складе после сеанса списывает материалы и ведёт статистику картриджей.','Отметьте чек-лист в записи до сеанса: предоплата, анкета, референсы — ничего не забудется.','На компьютере: N — новая запись, / — поиск, Esc — закрыть окно, Alt+1…6 — разделы.'];
+function notifCfg(){ return Object.assign({h24:true,h2:true,dayOf:true,write:true,stock:true,restock:true,expenses:true,tips:true},S.settings.notif||{}); }
+const isoL=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function computeSmartNotifications(){
+  const cfg=notifCfg(), nowD=new Date(), now=nowD.getTime(), hr=nowD.getHours(), today=isoL(nowD), tmr=isoL(new Date(now+86400000)), yst=isoL(new Date(now-86400000));
+  const refs=new Set(S.notifications.map(n=>n.refId)); const add=(t,k,r,x)=>{ if(refs.has(r)) return; refs.add(r); addNotification(t,k,r,x); };
+  const names=a=>a.slice(0,3).map(x=>x.name||x).join(', ')+(a.length>3?' и ещё '+(a.length-3):'');
+  S.events.filter(e=>e.date&&NOTIFY_TYPES.includes(e.type)&&!['cancelled','completed','noshow'].includes(e.status)).forEach(e=>{
+    const diff=new Date(e.date+'T'+(e.start||'10:00')).getTime()-now; if(diff<=0) return;
+    const c=e.clientId&&S.clients.find(x=>x.id===e.clientId), tl=EVENT_TYPES[e.type].label, who=c?c.name:(e.title||'');
+    const tail=(who?' — '+who:'')+(e.zone?' ('+e.zone+')':''), key=`${e.id}-${e.date}-${e.start||''}`, ex={eventId:e.id,clientId:e.clientId||''};
+    if(cfg.h2&&diff<=2*3600000) add(`Через 2 часа (${e.start||''}): ${tl}${tail}.`,'remind','r2-'+key,ex);
+    else if(cfg.h24&&diff<=24*3600000&&(e.date===tmr||(e.date===today&&!cfg.dayOf))) add(`${e.date===tmr?'Завтра':'Сегодня'} в ${e.start||''}: ${tl}${tail}.${c?' Напомните клиенту и подтвердите время.':''}`,'remind','r24-'+key,ex);
+    if(cfg.dayOf&&e.date===today&&(hr>=8||diff<=3*3600000)) add(`Сегодня в ${e.start||''}: ${tl}${tail}.`,'dayof','d-'+key,ex);
+  });
+  if(cfg.write){
+    S.events.filter(e=>e.type==='session'&&e.status==='completed'&&e.clientId).forEach(e=>{ const c=S.clients.find(x=>x.id===e.clientId); if(!c) return;
+      if(!e.careSent&&(e.date===today||e.date===yst)&&hr>=12) add(`Отправьте ${c.name} инструкцию по уходу за татуировкой.`,'care','care-'+e.id,{eventId:e.id,clientId:c.id});
+      if(e.healCheck&&e.healCheck<=today) add(`Напишите ${c.name}: узнайте, как заживает татуировка, и попросите фото.`,'write','heal-'+e.id+'-'+e.healCheck,{clientId:c.id,eventId:e.id}); });
+    const wait=S.clients.filter(c=>c.status==='Давно не был'||c.status==='Ожидает ответа');
+    if(hr>=10&&wait.length) add(`Пора написать клиентам (${wait.length}): ${names(wait)}.`,'write','writew-'+Math.floor(now/(7*86400000)),{digest:true});
+  }
+  const low=S.inventory.filter(i=>i.category!=='equipment'&&Number(i.qty)<=Number(i.threshold)), nm=i=>i.name+(i.config?' ('+i.config+(i.size?' '+i.size:'')+')':'');
+  if(cfg.stock){ const wk=Math.floor(now/(7*86400000)); low.forEach(i=>add(Number(i.qty)<=0?`Закончилось: ${nm(i)}. Пора заказать.`:`Заканчивается: ${nm(i)} — осталось ${i.qty} ${i.unit||'шт.'} (минимум ${i.threshold}).`,'stock',`lowstock-${i.id}-${i.qty}-${wk}`,{itemId:i.id})); }
+  if(cfg.restock&&hr>=10&&low.length) add(`Пополнение склада: нужно закупить ${low.length} поз. — ${names(low.map(i=>({name:nm(i)})))}.`,'restock','restock-'+today);
+  if(cfg.expenses&&hr>=19&&S.events.some(e=>e.date===today&&['session','consult','correction','model'].includes(e.type)&&e.status!=='cancelled')&&!(S.finance||[]).some(f=>f.type!=='income'&&f.date===today)) add('Не забудьте внести расходы за сегодня: материалы, аренда, транспорт.','expense','exp-'+today);
+  if(cfg.tips&&hr>=12) add('💡 '+TIPS[Math.floor(now/86400000)%TIPS.length],'tip','tip-'+today);
+}
+(function(){ const _c=computeAutoNotifications; computeAutoNotifications=function(){ _c(); try{ computeSmartNotifications(); }catch(e){ console.error(e); } renderNotifCount(); }; })();
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&S.settings) computeAutoNotifications(); });
+(function(){ const _rs=RENDERERS.settings; RENDERERS.settings=function(){ _rs.apply(this,arguments);
+  const c=notifCfg(), perm='Notification' in window?Notification.permission:'unsupported';
+  $('#content').insertAdjacentHTML('afterbegin',`<div class="cl-card"><div class="cl-lbl">Уведомления</div>
+  ${NOTIF_OPTS.map(o=>`<label class="ck-row" style="gap:10px"><input type="checkbox" data-n="${o[0]}" ${c[o[0]]?'checked':''}><span>${o[1]}</span></label>`).join('')}
+  <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm btn-primary" id="ntPerm">${perm==='granted'?'Системные уведомления включены':'Включить системные уведомления'}</button><button class="btn btn-sm" id="ntTest">Проверить</button></div>
+  <p class="small dim" style="margin:8px 0 0">${perm==='denied'?'Уведомления запрещены в настройках браузера или телефона. ':''}Приходят, пока приложение открыто или работает в фоне. На iPhone сначала добавьте приложение на экран «Домой».</p></div>`);
+  $$('[data-n]').forEach(i=>i.onchange=async()=>{ S.settings.notif=Object.assign(notifCfg(),{[i.dataset.n]:i.checked}); await saveSettings(); computeAutoNotifications(); });
+  $('#ntPerm').onclick=async()=>{ if(!('Notification' in window)){ toast('Браузер не поддерживает уведомления'); return; } await Notification.requestPermission(); RENDERERS.settings(); };
+  $('#ntTest').onclick=()=>{ if('Notification' in window&&Notification.permission==='granted') sysNotify('Тест: уведомления работают'); else toast('Сначала включите системные уведомления'); };
+}; })();
+
+
+/* ====================== PUSH на телефон и компьютер (ntfy) ====================== */
+function pushCfg(){ return Object.assign({enabled:false,server:'https://ntfy.sh',topic:'',names:false,sent:{}},S.settings.push||{}); }
+function pushOn(){ const c=pushCfg(); return !!(c.enabled&&c.topic); }
+async function savePush(c){ S.settings.push=c; await saveSettings(); }
+function newTopic(){ const a=new Uint8Array(14); crypto.getRandomValues(a); return 'inkos-'+Array.from(a,b=>(b%36).toString(36)).join(''); }
+function pushSafeText(kind,text){ return pushCfg().names||!['remind','dayof','write','care','followup','birthday'].includes(kind)?text:'Есть напоминание о клиенте — откройте INK.OS'; }
+async function ntfyPublish(title,message,atSec){
+  const c=pushCfg(), body={topic:c.topic,title,message,priority:4};
+  if(atSec) body.delay=String(atSec);
+  const r=await fetch(c.server.replace(/\/+$/,''),{method:'POST',body:JSON.stringify(body)});
+  if(!r.ok) throw new Error('ntfy '+r.status);
+}
+function pushCandidates(hz){
+  hz=hz||70*3600000; const cfg=notifCfg(), pc=Object.assign({},pushCfg(),{names:pushCfg().names||isNative()}), now=Date.now(), horizon=now+hz, out=[];
+  const put=(ref,when,title,text)=>{ if(when>now+20000&&when<=horizon) out.push({ref,at:Math.floor(when/1000),title,text}); };
+  const D=(date,h)=>new Date(date+'T'+String(h).padStart(2,'0')+':00').getTime();
+  const days=Array.from({length:Math.min(32,Math.ceil(hz/86400000)+1)},(_,n)=>isoL(new Date(now+n*86400000)));
+  S.events.filter(e=>e.date&&NOTIFY_TYPES.includes(e.type)&&!['cancelled','completed','noshow'].includes(e.status)).forEach(e=>{
+    const start=new Date(e.date+'T'+(e.start||'10:00')).getTime(), c=e.clientId&&S.clients.find(x=>x.id===e.clientId), tl=EVENT_TYPES[e.type].label;
+    const tail=((pc.names&&c)?' — '+c.name:(e.title&&!c?' — '+e.title:''))+(e.zone?' ('+e.zone+')':''), key=`${e.id}-${e.date}-${e.start||''}`;
+    if(cfg.h2) put('r2-'+key,start-2*3600000,'Через 2 часа',`${e.start||''}: ${tl}${tail}`);
+    if(cfg.h24) put('r24-'+key,start-24*3600000,'Завтра',`В ${e.start||''}: ${tl}${tail}. Напомните клиенту и подтвердите время.`);
+    if(cfg.dayOf){ const sh=+(e.start||'10:00').slice(0,2); put('d-'+key,sh>=9?D(e.date,8):start-3600000,'Сегодня',`В ${e.start||''}: ${tl}${tail}`); }
+  });
+  const low=S.inventory.filter(i=>i.category!=='equipment'&&Number(i.qty)<=Number(i.threshold));
+  if(cfg.restock&&low.length){ const t=low.slice(0,3).map(i=>i.name).join(', ')+(low.length>3?' и ещё '+(low.length-3):''); days.forEach(d=>put('restock-'+d,D(d,10),'Пополнение склада',`Нужно закупить ${low.length} поз.: ${t}.`)); }
+  if(cfg.expenses) days.forEach(d=>{ if(S.events.some(e=>e.date===d&&['session','consult','correction','model'].includes(e.type)&&e.status!=='cancelled')&&!(S.finance||[]).some(f=>f.type!=='income'&&f.date===d)) put('exp-'+d,D(d,19),'Расходы','Не забудьте внести расходы за сегодня.'); });
+  if(cfg.write) S.events.filter(e=>e.type==='session'&&e.status==='completed'&&e.clientId).forEach(e=>{ const c=S.clients.find(x=>x.id===e.clientId); if(!c) return; const who=pc.names?' '+c.name:' клиенту';
+    if(!e.careSent){ const nx=isoL(new Date(new Date(e.date+'T12:00').getTime()+86400000)); put('care-'+e.id,[D(e.date,12),D(nx,12)].find(t=>t>now)||0,'Уход',`Отправьте${who} инструкцию по уходу.`); }
+    if(e.healCheck) put(`heal-${e.id}-${e.healCheck}`,D(e.healCheck,10),'Заживление',`Напишите${who}: узнайте, как заживает, и попросите фото.`); });
+  return out;
+}
+let _pushBusy=false;
+async function syncPushSchedule(){
+  if(isNative()) return syncNativeSchedule();
+  if(!pushOn()||_pushBusy||!navigator.onLine) return; _pushBusy=true;
+  try{
+    const c=pushCfg(), sent=Object.assign({},c.sent), cut=Date.now()-6*86400000; Object.keys(sent).forEach(k=>{ if(sent[k]*1000<cut) delete sent[k]; });
+    for(const it of pushCandidates()){ if(sent[it.ref]) continue; await ntfyPublish(it.title,it.text,it.at); sent[it.ref]=it.at; }
+    c.sent=sent; c.lastSync=Date.now(); await savePush(c);
+  }catch(e){ console.warn('push sync',e); } finally{ _pushBusy=false; }
+}
+(function(){ const _ip=idbPut; let t=null; idbPut=function(store){ const r=_ip.apply(this,arguments); if(!['settings','notifications','auditLog'].includes(store)&&(pushOn()||isNative())){ clearTimeout(t); t=setTimeout(syncPushSchedule,4000); } return r; }; })();
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) setTimeout(syncPushSchedule,1500); });
+setTimeout(syncPushSchedule,6000); setInterval(syncPushSchedule,30*60000);
+(function(){ const _rs=RENDERERS.settings; RENDERERS.settings=function(){ _rs.apply(this,arguments);
+  const c=pushCfg(), host=c.server.replace(/^https?:\/\//,'').replace(/\/+$/,''), left=Object.values(c.sent).filter(t=>t*1000>Date.now()).length;
+  const card=c.enabled&&c.topic?`<p class="small" style="margin:0 0 10px">Push включён. Сделайте один раз на каждом устройстве:</p>
+    <ol class="small" style="margin:0 0 10px;padding-left:20px;line-height:1.7"><li>Установите бесплатное приложение <b>ntfy</b> (Google Play, App Store) — или на компьютере откройте ${esc(host)} в Chrome/Edge/Safari.</li><li>Подпишитесь на тему <b>${esc(c.topic)}</b> (кнопки ниже).</li><li>Разрешите уведомления и нажмите «Отправить тест».</li></ol>
+    <div class="btn-row"><a class="btn btn-sm" href="ntfy://${esc(host)}/${esc(c.topic)}">Открыть в приложении ntfy</a><a class="btn btn-sm" target="_blank" rel="noopener" href="${esc(c.server.replace(/\/+$/,''))}/${esc(c.topic)}">Открыть в браузере</a><button class="btn btn-sm" id="pkCopy">Скопировать тему</button></div>
+    <label class="ck-row" style="gap:10px;margin-top:10px"><input type="checkbox" id="pkNames" ${c.names?'checked':''}><span>Показывать имена клиентов в push</span></label>
+    <label>Сервер ntfy</label><input id="pkServer" value="${esc(c.server)}">
+    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm btn-primary" id="pkTest">Отправить тест</button><button class="btn btn-sm" id="pkSync">Обновить расписание</button><button class="btn btn-sm btn-danger" id="pkOff">Выключить</button></div>
+    <p class="small dim" style="margin:8px 0 0">Запланировано: ${left}${c.lastSync?' · синхронизация '+fmtDateTime(c.lastSync):''}</p>`
+   :`<p class="small" style="margin:0 0 10px">Чтобы уведомления приходили на телефон и компьютер даже при выключенном экране и закрытом приложении, используется бесплатный сервис ntfy: приложение заранее отправляет напоминания в ваш личный закрытый канал, а ntfy доставляет их в нужное время.</p><button class="btn btn-primary btn-block" id="pkOn">Включить push</button>`;
+  $('#content').insertAdjacentHTML('afterbegin',`<div class="cl-card"><div class="cl-lbl">Push на телефон и компьютер</div>${card}<p class="small dim" style="margin:10px 0 0">Тексты уведомлений проходят через сервер ntfy (по умолчанию имена клиентов скрыты). Напоминания планируются на 3 суток вперёд при каждом открытии приложения. Если перенесёте или отмените запись, уже запланированное напоминание всё равно придёт.</p></div>`);
+  const on=async()=>{ const n=pushCfg(); n.enabled=true; n.topic=n.topic||newTopic(); n.sent={}; await savePush(n); RENDERERS.settings(); syncPushSchedule(); };
+  if($('#pkOn')) $('#pkOn').onclick=on;
+  if($('#pkCopy')) $('#pkCopy').onclick=()=>copyText(pushCfg().topic);
+  if($('#pkNames')) $('#pkNames').onchange=async e=>{ const n=pushCfg(); n.names=e.target.checked; n.sent={}; await savePush(n); toast('Расписание будет обновлено'); syncPushSchedule(); };
+  if($('#pkServer')) $('#pkServer').onchange=async e=>{ const n=pushCfg(); n.server=e.target.value.trim()||'https://ntfy.sh'; n.sent={}; await savePush(n); RENDERERS.settings(); };
+  if($('#pkTest')) $('#pkTest').onclick=async()=>{ try{ await ntfyPublish('INK.OS','Тест: push работает ✅'); toast('Тест отправлен'); }catch(e){ toast('Не удалось отправить: '+e.message); } };
+  if($('#pkSync')) $('#pkSync').onclick=async()=>{ const n=pushCfg(); n.sent={}; await savePush(n); await syncPushSchedule(); toast('Расписание обновлено'); RENDERERS.settings(); };
+  if($('#pkOff')) $('#pkOff').onclick=async()=>{ const n=pushCfg(); n.enabled=false; await savePush(n); RENDERERS.settings(); };
+}; })();
+
+
+/* ====================== ANDROID APP (Capacitor): локальные уведомления, файлы ====================== */
+const isNative=()=>!!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform());
+let _nativeRefs=new Set();
+const refToId=r=>{ let h=7; for(const ch of r) h=(h*31+ch.charCodeAt(0))|0; return Math.abs(h)%2000000000+1; };
+async function nativePerm(ask){ const ln=Capacitor.Plugins.LocalNotifications; let p=await ln.checkPermissions(); if(p.display!=='granted'&&ask) p=await ln.requestPermissions(); return p.display==='granted'; }
+async function syncNativeSchedule(){
+  try{ const ln=Capacitor.Plugins.LocalNotifications; if(!(await nativePerm(true))) return;
+    const pend=await ln.getPending(); if(pend.notifications&&pend.notifications.length) await ln.cancel({notifications:pend.notifications.map(n=>({id:n.id}))});
+    const items=pushCandidates(30*86400000).slice(0,400); _nativeRefs=new Set(items.map(i=>i.ref));
+    if(items.length) await ln.schedule({notifications:items.map(i=>({id:refToId(i.ref),title:'INK.OS · '+i.title,body:i.text,schedule:{at:new Date(i.at*1000),allowWhileIdle:true}}))});
+  }catch(e){ console.warn('native schedule',e); }
+}
+async function nativeNow(title,text){ try{ if(!(await nativePerm(false))) return; await Capacitor.Plugins.LocalNotifications.schedule({notifications:[{id:Math.floor(Math.random()*1e9)+1,title,body:text,schedule:{at:new Date(Date.now()+1500)}}]}); }catch(e){} }
+(function(){ const _d=downloadBlob; downloadBlob=async function(blob,name){ if(!isNative()) return _d(blob,name);
+  try{ const b64=await new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(String(fr.result).split(',')[1]); fr.readAsDataURL(blob); });
+    const FS=Capacitor.Plugins.Filesystem; await FS.writeFile({path:name,data:b64,directory:'CACHE'}); const u=await FS.getUri({path:name,directory:'CACHE'});
+    await Capacitor.Plugins.Share.share({title:name,url:u.uri,dialogTitle:'Сохранить или отправить'}); }catch(e){ toast('Не удалось сохранить файл'); } }; })();
+(function(){ const _rs=RENDERERS.settings; RENDERERS.settings=function(){ _rs.apply(this,arguments); if(!isNative()) return;
+  $('#content').insertAdjacentHTML('afterbegin','<div class="cl-card"><div class="cl-lbl">Уведомления в приложении</div><p class="small" style="margin:0">Напоминания встроены в приложение и приходят даже при выключенном экране и закрытом приложении, без интернета. Расписание на 30 дней обновляется при каждом изменении данных. Если уведомления не приходят, разрешите приложению уведомления и точные будильники в настройках телефона и отключите для него экономию батареи.</p><div class="btn-row" style="margin-top:10px"><button class="btn btn-sm btn-primary" id="nTest">Отправить тест</button><button class="btn btn-sm" id="nSync">Обновить расписание</button></div></div>');
+  $('#nTest').onclick=async()=>{ if(await nativePerm(true)) { await nativeNow('INK.OS','Тест: уведомления работают ✅'); toast('Тест придёт через секунду'); } else toast('Разрешите уведомления в настройках телефона'); };
+  $('#nSync').onclick=async()=>{ await syncNativeSchedule(); toast('Расписание обновлено'); };
+}; })();
+
+
+/* ====================== СКОЛЬКО НУЖНО ЗАРАБОТАТЬ В МЕСЯЦ ====================== */
+function earnCfg(){ return Object.assign({desired:0,days:5,avg:0,fixed:[]},S.settings.earn||{}); }
+function earnPlan(){
+  const E=earnCfg(), tax=Number(S.settings.taxRate||0), now=new Date(), ym=isoL(now).slice(0,7);
+  const fixedSum=E.fixed.reduce((a,f)=>a+Number(f.amount||0),0), des=Number(E.desired||0);
+  const required=(des>0||fixedSum>0)?Math.ceil((des+fixedSum)/(1-Math.min(tax,95)/100)):Number(S.settings.monthGoal||0);
+  const from=isoL(new Date(now.getTime()-90*86400000)), ev=S.events.filter(e=>e.status==='completed'&&Number(e.cost)>0&&e.date>=from);
+  const auto=ev.length?Math.round(ev.reduce((a,e)=>a+Number(e.cost),0)/ev.length):0, avg=Number(E.avg||0)||auto;
+  const income=(S.finance||[]).filter(f=>f.type==='income'&&(f.date||'').startsWith(ym)).reduce((a,f)=>a+Number(f.amount||0),0);
+  const dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate(), wdLeft=Math.max(1,Math.ceil((dim-now.getDate()+1)*E.days/7)), wdMonth=Math.max(1,Math.round(dim*E.days/7));
+  const left=Math.max(0,required-income);
+  return {E,tax,fixedSum,des,required,avg,auto,income,left,pct:required?Math.min(100,Math.round(income/required*100)):0,sessions:avg?Math.ceil(required/avg):0,sessionsLeft:avg?Math.ceil(left/avg):0,perDay:Math.ceil(required/wdMonth),perDayLeft:Math.ceil(left/wdLeft),perWeek:avg?Math.ceil(required/avg/(dim/7)):0};
+}
+function goalCardHtml(){
+  const P=earnPlan(); if(!P.required) return '';
+  return `<div class="cl-card" style="margin-top:12px;cursor:pointer" onclick="anTab='plan';go('analytics')"><div class="cl-lbl">Цель месяца</div><div class="row"><b>${fmtMoney(P.income)} из ${fmtMoney(P.required)}</b><span class="dim small">${P.pct}%</span></div><div class="pj-bar" style="margin:8px 0"><div style="width:${P.pct}%"></div></div><div class="small dim">${P.left?`Осталось ${fmtMoney(P.left)}${P.avg?' · ≈ '+P.sessionsLeft+' сеансов':''} · ${fmtMoney(P.perDayLeft)} в рабочий день`:'Цель выполнена 🎯'}</div></div>`;
+}
+function planHtml(){
+  const P=earnPlan(), E=P.E, m=fmtMoney;
+  return `<div class="cl-card"><div class="cl-lbl">Сколько нужно заработать в месяц</div>
+    <div class="an-big">${P.required?m(P.required):'—'}</div>
+    <div class="small dim">${(P.des||P.fixedSum)?`на жизнь ${m(P.des)} + расходы ${m(P.fixedSum)} + налог ${P.tax}%`:'Заполните поля ниже — приложение посчитает сумму.'}</div>
+    ${P.required?`<div class="ev-sum" style="margin-top:8px">${P.avg?`<div class="r"><span>Сеансов в месяц</span><b>${P.sessions}</b></div><div class="r"><span>В неделю</span><b>≈ ${P.perWeek}</b></div>`:'<div class="small dim">Укажите средний чек, чтобы увидеть число сеансов.</div>'}<div class="r"><span>За рабочий день</span><b>${m(P.perDay)}</b></div></div>`:''}</div>
+  ${P.required?`<div class="cl-card"><div class="cl-lbl">Этот месяц</div><div class="pj-prog"><div class="pj-bar"><div style="width:${P.pct}%"></div></div><b>${P.pct}%</b></div><div class="small dim" style="margin-top:8px">Заработано ${m(P.income)}${P.left?` · осталось ${m(P.left)} · нужно ${m(P.perDayLeft)} в рабочий день${P.avg?' (≈ '+P.sessionsLeft+' сеансов)':''}`:' · цель выполнена 🎯'}</div></div>`:''}
+  <div class="cl-card"><div class="cl-lbl">Расчёт</div>
+    <div class="field-row"><div><label>Хочу получать чистыми, в месяц</label><input type="number" id="epDes" min="0" value="${E.desired||''}"></div><div><label>Рабочих дней в неделю</label><input type="number" id="epDays" min="1" max="7" value="${E.days}"></div></div>
+    <label>Средний чек ${P.auto?`(по сеансам: ${m(P.auto)})`:''}</label><input type="number" id="epAvg" min="0" placeholder="${P.auto||'например 8000'}" value="${E.avg||''}">
+    <div class="cl-lbl" style="margin-top:14px">Постоянные расходы в месяц</div>
+    ${E.fixed.map((f,i)=>`<div class="row2" style="cursor:default"><div class="b">${esc(f.name)}</div><b>${m(f.amount)}</b><button class="btn btn-sm btn-icon" data-del="${i}" aria-label="Удалить">${icon('close')}</button></div>`).join('')||'<p class="small dim">Аренда, реклама, материалы, связь…</p>'}
+    <div class="field-row" style="margin-top:8px"><div><label>Статья</label><input id="epName" placeholder="Аренда"></div><div><label>Сумма</label><input type="number" id="epAmt" min="0"></div></div>
+    <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm btn-primary" id="epAdd">Добавить расход</button><button class="btn btn-sm" id="epAuto">Подставить средние расходы за 3 мес.</button></div>
+    <p class="small dim" style="margin:10px 0 0">Налог (${P.tax}%) берётся из вкладки «Налоги».</p>
+    ${P.required?`<button class="btn btn-block" style="margin-top:10px" id="epGoal">Сделать целью месяца</button>`:''}</div>`;
+}
+function bindPlan(){
+  const save=async patch=>{ S.settings.earn=Object.assign(earnCfg(),patch); await saveSettings(); RENDERERS.analytics(); };
+  $('#epDes').onchange=e=>save({desired:Number(e.target.value||0)});
+  $('#epDays').onchange=e=>save({days:Math.min(7,Math.max(1,Number(e.target.value||5)))});
+  $('#epAvg').onchange=e=>save({avg:Number(e.target.value||0)});
+  $('#epAdd').onclick=()=>{ const n=$('#epName').value.trim(), a=Number($('#epAmt').value||0); if(!n||!a){ toast('Укажите статью и сумму'); return; } save({fixed:earnCfg().fixed.concat([{name:n,amount:a}])}); };
+  $$('[data-del]').forEach(b=>b.onclick=()=>save({fixed:earnCfg().fixed.filter((_,i)=>i!==+b.dataset.del)}));
+  $('#epAuto').onclick=()=>{ const now=new Date(), a=isoL(new Date(now.getFullYear(),now.getMonth()-3,1)), b=isoL(new Date(now.getFullYear(),now.getMonth(),1));
+    const sum=(S.finance||[]).filter(f=>f.type!=='income'&&f.date>=a&&f.date<b).reduce((q,f)=>q+Number(f.amount||0),0), avg=Math.round(sum/3);
+    if(!avg){ toast('За последние 3 месяца расходов нет'); return; }
+    save({fixed:earnCfg().fixed.filter(f=>f.name!=='Средние расходы (3 мес.)').concat([{name:'Средние расходы (3 мес.)',amount:avg}])}); };
+  if($('#epGoal')) $('#epGoal').onclick=async()=>{ S.settings.monthGoal=earnPlan().required; await saveSettings(); toast('Цель месяца обновлена'); };
+}
+
+/* ====================== GLOBAL SEARCH ====================== */
+function openGlobalSearch(){
+  openSheet('Поиск', `<input type="text" id="globalSearchInput" placeholder="Клиенты, записи, проекты, финансы, материалы..." autocomplete="off">
+  <div id="globalSearchResults" style="margin-top:10px"></div>`);
+  const input=$('#globalSearchInput');
   setTimeout(()=>input && input.focus(),80);
   input.oninput=()=>runGlobalSearch(input.value.trim().toLowerCase());
   runGlobalSearch('');
