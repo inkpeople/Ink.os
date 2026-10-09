@@ -780,7 +780,7 @@ const uid=()=>'id'+Date.now().toString(36)+Math.random().toString(36).slice(2,8)
 const fmtMoney=n=>{n=Number(n)||0;const cur=(S.settings&&S.settings.currency)||'₽';return n.toLocaleString('ru-RU',{maximumFractionDigits:0})+' '+cur;};
 const fmtDate=d=>{ if(!d) return '—'; const dt=(d instanceof Date)?d:new Date(d); return dt.toLocaleDateString('ru-RU'); };
 const fmtDateTime=d=>{ const dt=(d instanceof Date)?d:new Date(d); return dt.toLocaleDateString('ru-RU')+' '+dt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}); };
-const todayISO=()=>new Date().toISOString().slice(0,10);
+const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 const daysBetween=(a,b)=>Math.floor((new Date(b)-new Date(a))/86400000);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function toast(msg,type){
@@ -4391,8 +4391,7 @@ function generateAppIcon(){
 // Service worker (sw.js рядом с index.html) работает только при открытии по https.
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
-    const swCode=`self.addEventListener('fetch',e=>{});`;
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
+    navigator.serviceWorker.register(new URL('sw.js',document.baseURI)).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
 
