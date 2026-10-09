@@ -3025,6 +3025,13 @@ function buildIncomeSeries(startISO,endISO,granularity){
   return points;
 }
 RENDERERS.finance=function(){
+  try {
+  // Normalize records imported from older backups before reading finance analytics.
+  S.finance=Array.isArray(S.finance)?S.finance.filter(f=>f&&typeof f==='object'):[];
+  S.events=Array.isArray(S.events)?S.events.filter(e=>e&&typeof e==='object'):[];
+  S.clients=Array.isArray(S.clients)?S.clients.filter(c=>c&&typeof c==='object'):[];
+  S.payments=Array.isArray(S.payments)?S.payments.filter(p=>p&&typeof p==='object'):[];
+  S.settings=S.settings&&typeof S.settings==='object'?S.settings:defaultSettings();
   const items=S.finance.filter(f=>financeScope(f));
   const income=items.filter(f=>f.type==='income').reduce((s,f)=>s+Number(f.amount||0),0);
   const expense=items.filter(f=>f.type==='expense').reduce((s,f)=>s+Number(f.amount||0),0);
@@ -3108,6 +3115,20 @@ RENDERERS.finance=function(){
   </div>
   <p class="small dim">* В доход не входят расходные материалы (картриджи, пигменты, бумага и т.д.) и зарплаты мастеров. Изменение % — по сравнению с предыдущим таким же периодом.</p>`;
   if(!S.settings.hideFinance) setTimeout(()=>drawLineChart($('#finMainChart'),chartPoints),20);
+  } catch(err) {
+    console.error('INK.OS: finance renderer failed',err);
+    const root=$('#content');
+    if(root) root.innerHTML=`<h2>Финансы</h2>
+      <div class="card">
+        <p>Не удалось полностью загрузить финансовую сводку.</p>
+        <p class="small dim">Данные операций сохранены. Можно повторить загрузку или добавить операцию.</p>
+        <p class="small dim" style="overflow-wrap:anywhere">Ошибка: ${esc(err&&err.message?err.message:String(err))}</p>
+        <div class="btn-row">
+          <button class="btn btn-sm" onclick="go('finance')">Повторить</button>
+          <button class="btn btn-sm btn-primary" onclick="openFinanceForm()">Добавить операцию</button>
+        </div>
+      </div>`;
+  }
 };
 function openFinCategories(){
   const items=window._finItems||[];
