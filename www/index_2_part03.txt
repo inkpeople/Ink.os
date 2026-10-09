@@ -1,800 +1,1017 @@
-    const title=(fd.get('title')||'').trim();
-    if(!title){ toast('Введите название проекта'); return; }
-    const newProject={id:uid(),clientId,title,zone:(fd.get('zone')||'').trim(),sessionsPlanned:Number(fd.get('sessionsPlanned')||4),totalCost:fd.get('totalCost')||'',notes:''};
-    await idbPut('projects',newProject);
-    S.projects.push(newProject);
-    closeSheet();
-    toast('Проект создан');
-    const sel=document.getElementById(selectId);
-    if(sel){
-      const opt=document.createElement('option');
-      opt.value=newProject.id; opt.textContent=newProject.title;
-      sel.insertBefore(opt, sel.lastElementChild);
-      sel.value=newProject.id;
-    }
-  };
+ng-function:cubic-bezier(.5,0,.9,.5)}16%{clip-path:inset(0 0 79.5% 0)}22%{clip-path:inset(0 0 79% 0)}66%{clip-path:inset(0 0 31.5% 0)}80%,100%{clip-path:inset(0 0 0 0)}}
+@keyframes spScan{0%{top:0;opacity:1;transform:scaleX(.03)}16%{top:20.5%;transform:scaleX(.03)}22%{top:21%;transform:scaleX(.03)}30%{transform:scaleX(1)}66%{top:68.5%;opacity:1;transform:scaleX(1)}80%{top:100%;opacity:.6;transform:scaleX(.5)}84%,100%{top:100%;opacity:0}}
+@keyframes spLogo{0%,52%{opacity:0}57%{opacity:.95}61%{opacity:.25}66%{opacity:.8}71%{opacity:.3}78%{opacity:.6}100%{opacity:.45}}
+@keyframes spTip{from{opacity:.15}to{opacity:.9}}
+@keyframes spGlow{to{opacity:1}}
+@media(prefers-reduced-motion:reduce){#splash.play *{animation-duration:.01s!important;animation-delay:0s!important}}
+/* ===== adaptive: iOS / Android / desktop ===== */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+@supports(height:100dvh){html,body{height:100dvh}}
+*{-webkit-tap-highlight-color:transparent}
+body{overscroll-behavior:none}
+#content{-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
+button,.navbtn,.nav-item,.ev-row,.sheet-item,.todo-row,.up-card,.cl-row,.mc{touch-action:manipulation;-webkit-user-select:none;user-select:none}
+button,.navbtn,.nav-item,.sheet-item{cursor:pointer}
+:focus-visible{outline:2px solid var(--red-soft);outline-offset:2px}
+#app{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+#topbar{padding-top:max(14px,calc(env(safe-area-inset-top,0px) + 8px))}
+#bottomnav{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+@media(pointer:coarse){input,select,textarea{font-size:16px!important}}
+@media(hover:hover){.btn:hover{border-color:#6b1a21}.ev-row:hover,.todo-row:hover,.up-card:hover,.cl-card:hover{border-color:#3b3b45}#sidebar .nav-item:hover{background:#15151a}}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#2a2a31;border-radius:8px}::-webkit-scrollbar-track{background:transparent}
+@media(max-height:480px) and (orientation:landscape){#bottomnav .nlabel{display:none}#topbar{padding-top:6px;padding-bottom:2px}#content{padding-bottom:64px}}
+@media(min-width:900px){
+  #content{padding:22px 36px}#content>*{max-width:980px}
+  #topbar{padding:18px 36px 8px}
+  #sidebar{background:#07070a;border-right:1px solid #1d1d22;width:236px}
+  .qa-grid{grid-template-columns:repeat(4,1fr)}
+  .modal-overlay.client-open{justify-content:flex-end;align-items:stretch;padding:0}
+  .modal.client-screen{max-width:540px;width:100%;height:100%;max-height:100%;border-radius:0;border-width:0 0 0 1px;padding:22px 26px;box-shadow:-20px 0 60px rgba(0,0,0,.6)}
 }
-function openQuickClientSheet(selectId){
-  openSheet('Новый клиент', `
-    <form id="quickClientForm">
-    <label>Имя*</label><input required name="name" placeholder="Имя клиента">
-    <label>Телефон</label><input type="tel" name="phone" placeholder="+7 900 000-00-00">
-    <p class="small dim" style="margin-top:8px">Соцсети (Telegram, Instagram, ВКонтакте, MAX) можно добавить сразу после создания — кнопками в разделе «Контакты».</p>
-    <button class="btn btn-primary btn-block" style="margin-top:12px" type="submit">Создать клиента</button>
-    </form>
-  `,{centered:true});
-  const nameInput=$('#quickClientForm [name=name]'); if(nameInput) setTimeout(()=>nameInput.focus(),50);
-  $('#quickClientForm').onsubmit=async ev=>{
-    ev.preventDefault();
-    const fd=new FormData(ev.target);
-    const name=(fd.get('name')||'').trim();
-    if(!name){ toast('Введите имя клиента'); return; }
-    const newClient={id:uid(),name,phone:(fd.get('phone')||'').trim(),instagram:'',whatsapp:'',telegram:'',vk:'',max:'',profileLink:'',city:'',country:'',cameFrom:'',firstVisit:todayISO(),lastVisit:'',visits:0,totalSum:0,source:'',styles:'',zones:'',status:'Новый',nextContact:'',quickNotes:[]};
-    await idbPut('clients',newClient);
-    S.clients.push(newClient);
-    closeSheet();
-    toast('Клиент создан и добавлен в раздел «Клиенты»');
-    const sel=document.getElementById(selectId);
-    if(sel){
-      const opt=document.createElement('option');
-      opt.value=newClient.id; opt.textContent=newClient.name;
-      sel.insertBefore(opt, sel.lastElementChild);
-      sel.value=newClient.id;
-      if(typeof window._refreshEvtContacts==='function') window._refreshEvtContacts();
-    }
-    if(currentRoute==='clients') renderClientsList();
-  };
-}
-function openContactFillSheet(clientId,key,label){
-  if(!clientId){ toast('Сначала выберите или создайте клиента'); return; }
-  const isPhone=key==='phone';
-  openSheet(`Добавить: ${esc(label)}`, `
-    <form id="contactFillForm">
-    <label>${esc(label)}</label>
-    <input type="${isPhone?'tel':'text'}" name="val" placeholder="${isPhone?'+7 900 000-00-00':'@username или ссылка на профиль'}">
-    <button class="btn btn-primary btn-block" style="margin-top:12px" type="submit">Сохранить</button>
-    </form>
-  `,{centered:true});
-  const input=$('#contactFillForm [name=val]'); if(input) setTimeout(()=>input.focus(),50);
-  $('#contactFillForm').onsubmit=async ev=>{
-    ev.preventDefault();
-    const val=$('#contactFillForm [name=val]').value.trim();
-    if(!val){ toast('Введите значение'); return; }
-    const client=S.clients.find(c=>c.id===clientId);
-    if(!client){ closeSheet(); return; }
-    client[key]=val;
-    await idbPut('clients',client);
-    closeSheet();
-    toast('Контакт сохранён');
-    if(typeof window._refreshEvtContacts==='function') window._refreshEvtContacts();
-    if(document.getElementById('clientTabBody')) openClient(clientId,'info');
-    if(currentRoute==='clients') renderClientsList();
-  };
-}
-function renderClientsList(){
-  let list=S.clients.slice();
-  const q=clientFilter.q.trim().toLowerCase();
-  if(q) list=list.filter(c=>[c.name,c.phone,c.instagram,c.city,c.whatsapp,c.telegram].filter(Boolean).join(' ').toLowerCase().includes(q));
-  if(clientFilter.status) list=list.filter(c=>c.status===clientFilter.status);
-  if(clientFilter.sort==='name') list.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  if(clientFilter.sort==='last') list.sort((a,b)=>new Date(b.lastVisit||0)-new Date(a.lastVisit||0));
-  if(clientFilter.sort==='sum') list.sort((a,b)=>(b.totalSum||0)-(a.totalSum||0));
-  if(clientFilter.sort==='visits') list.sort((a,b)=>(b.visits||0)-(a.visits||0));
-  $('#clientsList').innerHTML = list.length ? list.map(c=>`
-    <div class="card" style="margin-bottom:8px;cursor:pointer" onclick="openClient('${c.id}')">
-      <div class="row">
-        <div><b>${esc(c.name)}</b> <span class="badge ${statusBadgeClass(c.status)}">${esc(c.status||'—')}</span></div>
-        <div class="small dim">${c.city?esc(c.city)+' · ':''}${c.phone||''}</div>
-      </div>
-      <div class="small dim" style="margin-top:4px">Визитов: ${c.visits||0} · Сумма: ${fmtMoney(c.totalSum)} · Последний визит: ${fmtDate(c.lastVisit)}</div>
-    </div>`).join('') : '<p class="dim">Клиенты не найдены.</p>';
-}
-function openClientForm(existing){
-  const c=existing||{id:null,name:'',phone:'',instagram:'',whatsapp:'',telegram:'',vk:'',max:'',profileLink:'',city:'',country:'',cameFrom:'',firstVisit:todayISO(),lastVisit:'',visits:0,totalSum:0,source:'',styles:'',zones:'',status:'Новый',nextContact:'',quickNotes:[],birthDate:'',allergies:'',comment:''};
-  openModal(`<div class="modal-header"><h3>${existing?'Редактировать клиента':'Новый клиент'}</h3><button class="x" onclick="closeModal()">✕</button></div>
-  <form id="clientForm">
-  <label>Имя*</label><input required name="name" value="${esc(c.name)}">
-  <label>Телефон</label><input name="phone" value="${esc(c.phone)}">
-  <label>Соцсети (где общались с клиентом)</label>
-  <div class="field-row">
-    <div><label style="margin-top:0">Telegram</label><input name="telegram" value="${esc(c.telegram)}" placeholder="@username или ссылка"></div>
-    <div><label style="margin-top:0">Instagram</label><input name="instagram" value="${esc(c.instagram)}" placeholder="@username или ссылка"></div>
+@media(min-width:1280px){#content>*{max-width:1100px}}
+/* ===== section designs (cities, data, help, clients, analytics, report) ===== */
+.chips{display:flex;gap:8px;margin:10px 0 12px;overflow-x:auto}.chips button{flex:1;white-space:nowrap;padding:9px 14px;border-radius:10px;background:#0d0d10;border:1px solid var(--line);color:var(--text-dim);font-size:13.5px}.chips button.on{background:linear-gradient(180deg,#2a0b10,#12070a);border-color:var(--red);color:#fff;box-shadow:0 0 12px var(--red-glow)}
+.search2{width:100%;background:#0d0d10;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:6px}
+.row2{display:flex;align-items:center;gap:14px;padding:11px 4px;border-bottom:1px solid #17171c;cursor:pointer}.row2:last-child{border-bottom:0}.row2 .ico{color:var(--text-mute)}
+.row2 .b{flex:1;min-width:0}.row2 .b b{display:block;font-size:15.5px}.row2 .st{display:inline-flex;align-items:center;gap:6px;font-size:12px;margin-top:5px}.row2 .st i{width:8px;height:8px;border-radius:50%}
+.city-ph{width:64px;height:56px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:rgba(255,255,255,.85);flex-shrink:0;border:1px solid #2a2a31}
+.stat2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}.stat2>div{background:#0d0d10;border:1px solid var(--line);border-radius:12px;padding:12px 14px}.stat2 small{font-size:12px;color:var(--text-dim)}.stat2 b{display:block;font-size:21px;margin:4px 0}
+.dlt{font-size:11.5px;font-weight:700}.dlt.up{color:var(--green)}.dlt.dn{color:var(--red-soft)}
+.donut{width:130px;height:130px;border-radius:50%;flex-shrink:0;-webkit-mask:radial-gradient(circle,transparent 46%,#000 47%);mask:radial-gradient(circle,transparent 46%,#000 47%)}
+.leg{flex:1;font-size:13.5px}.leg div{display:flex;align-items:center;gap:8px;padding:5px 0}.leg i{width:10px;height:10px;border-radius:50%}.leg span{flex:1}
+.faq{background:#0d0d10;border:1px solid var(--line);border-radius:10px;margin-bottom:8px}.faq summary{list-style:none;padding:14px;cursor:pointer;font-size:15px;display:flex;justify-content:space-between;gap:10px}.faq summary::-webkit-details-marker{display:none}.faq summary::after{content:'›';color:var(--text-mute);font-size:20px;line-height:1;transition:transform .2s}.faq[open] summary::after{transform:rotate(90deg)}.faq p{margin:0;padding:0 14px 14px;color:var(--text-dim);font-size:13.5px;line-height:1.5}
+/* ===== mentoring ===== */
+.mt-head{display:flex;align-items:center;justify-content:space-between;margin:16px 2px 10px}.mt-head h3{margin:0;font-size:15px;letter-spacing:.06em;text-transform:uppercase}
+.btn-red-o{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:10px;background:linear-gradient(180deg,#1c0a0d,#0f0709);border:1px solid #8a1b24;color:var(--red-soft);font-weight:600;font-size:14px;box-shadow:inset 0 0 12px rgba(225,31,43,.15)}.btn-red-o .ico{width:16px;height:16px}
+.stu{display:flex;align-items:center;gap:14px;padding:12px 14px;background:#0d0d10;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;cursor:pointer}
+.stu .cl-av{width:52px;height:52px;font-size:17px;flex-shrink:0}.stu .mid{flex:1;min-width:0}.stu b{font-size:16px}
+.stu-row{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:13px;color:var(--text-dim)}.stu-bar{flex:1;height:7px;background:#1b1b21;border-radius:6px;overflow:hidden}.stu-bar div{height:100%;background:linear-gradient(90deg,#e0222e,#ff5560);border-radius:6px;box-shadow:0 0 8px var(--red-glow)}
+.lessons .l{display:grid;grid-template-columns:74px 48px 1fr;gap:8px;font-size:14px;padding:6px 0}.lessons .l span:first-child{font-weight:700}.lessons .l span:nth-child(2){color:var(--text-dim)}
+.hw-hero{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid #3a2a78;background:linear-gradient(90deg,#1a1038,#0f0a24);cursor:pointer}.hw-hero .cl-av{width:44px;height:44px;font-size:15px;flex-shrink:0}.hw-hero b{display:block;font-size:14.5px}.hw-hero .b{flex:1;min-width:0}
+</style>
+</head>
+<body>
+
+<div id="splash">
+  <div class="sp-col">
+    <div class="sp-ext sp-top"><i></i></div>
+    <div class="sp-stage"><div class="sp-glow"></div><div class="sp-img sp-main"></div><div class="sp-img sp-logo"></div><div class="sp-img sp-tip"></div><div class="sp-scan"></div></div>
+    <div class="sp-ext sp-bot"><i></i></div>
   </div>
-  <div class="field-row">
-    <div><label style="margin-top:0">ВКонтакте</label><input name="vk" value="${esc(c.vk)}" placeholder="ссылка на профиль"></div>
-    <div><label style="margin-top:0">MAX</label><input name="max" value="${esc(c.max)}" placeholder="ссылка/ID"></div>
-  </div>
-  <label>WhatsApp</label><input name="whatsapp" value="${esc(c.whatsapp)}">
-  <label>Другая ссылка на профиль</label><input name="profileLink" value="${esc(c.profileLink)}">
-  <div class="field-row">
-    <div><label>Город</label><input name="city" value="${esc(c.city)}"></div>
-    <div><label>Страна</label><input name="country" value="${esc(c.country)}"></div>
-  </div>
-  <label>Откуда приехал</label><input name="cameFrom" value="${esc(c.cameFrom)}">
-  <div class="field-row">
-    <div><label>Дата первого визита</label><input type="date" name="firstVisit" value="${c.firstVisit||''}"></div>
-    <div><label>Дата следующего контакта</label><input type="date" name="nextContact" value="${c.nextContact||''}"></div>
-  </div>
-  <label>Дата рождения</label><input type="date" name="birthDate" value="${c.birthDate||''}">
-  <label>Источник клиента (как узнал о мастере)</label><input name="source" value="${esc(c.source)}" placeholder="Instagram, рекомендация, guest spot...">
-  <div class="field-row">
-    <div><label>Любимые стили</label><input name="styles" value="${esc(c.styles)}"></div>
-    <div><label>Зоны тела</label><input name="zones" value="${esc(c.zones)}"></div>
-  </div>
-  <label>Аллергии / важная информация</label><textarea name="allergies" rows="2" placeholder="Аллергия на пигмент, особенности кожи и т.д.">${esc(c.allergies)}</textarea>
-  <label>Комментарий</label><textarea name="comment" rows="2">${esc(c.comment)}</textarea>
-  <label>Статус</label><select name="status">${CLIENT_STATUS.map(s=>`<option ${c.status===s?'selected':''}>${s}</option>`).join('')}</select>
-  <label>Быстрые заметки</label>
-  <div id="quickNotesWrap">${QUICK_NOTES.map(n=>`<span class="chip ${c.quickNotes&&c.quickNotes.includes(n)?'active':''}" data-n="${esc(n)}">${n}</span>`).join('')}</div>
-  <div class="row" style="margin-top:14px">
-    ${existing?`<button type="button" class="btn btn-danger" onclick="deleteClient('${c.id}')">Удалить</button>`:'<span></span>'}
-    <button type="submit" class="btn btn-primary">Сохранить</button>
-  </div>
-  </form>`);
-  $$('#quickNotesWrap .chip').forEach(ch=>ch.onclick=()=>ch.classList.toggle('active'));
-  $('#clientForm').onsubmit=async e=>{
-    e.preventDefault();
-    const fd=new FormData(e.target);
-    const oldStatus=c.status, oldComment=c.comment;
-    const obj={...c};
-    fd.forEach((v,k)=>obj[k]=v);
-    obj.quickNotes=$$('#quickNotesWrap .chip.active').map(ch=>ch.dataset.n);
-    if(!obj.id) obj.id=uid();
-    await idbPut('clients',obj);
-    const idx=S.clients.findIndex(x=>x.id===obj.id);
-    if(idx>=0) S.clients[idx]=obj; else S.clients.push(obj);
-    if(idx>=0){
-      if(oldStatus!==obj.status) logAudit('edit','Клиент',obj.name,`Статус: «${oldStatus||'—'}» → «${obj.status||'—'}»`);
-      if((oldComment||'')!==(obj.comment||'')) logAudit('edit','Клиент',obj.name,`Изменён комментарий`);
-    }
-    closeModal(); toast('Клиент сохранён');
-    if(currentRoute==='clients') go('clients');
-  };
-}
-function deleteClient(id){
-  const c=S.clients.find(x=>x.id===id);
-  confirmDialog('Удалить клиента и его данные из списка? История записей останется в календаре.',()=>{
-    trashDelete({store:'clients',listKey:'clients',id,message:'Клиент удалён.',auditEntity:'Клиент',auditLabel:c?c.name:'',onChange:()=>{ go('clients'); }});
-  });
-}
-function pickClientAvatar(id){
-  const c=S.clients.find(x=>x.id===id); if(!c) return;
-  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
-  inp.onchange=()=>{
-    const f=inp.files&&inp.files[0]; if(!f) return;
-    const r=new FileReader();
-    r.onload=()=>{ const im=new Image(); im.onload=async()=>{
-      const sz=420, cv=document.createElement('canvas'); cv.width=cv.height=sz;
-      const m=Math.min(im.width,im.height); cv.getContext('2d').drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,sz,sz);
-      c.avatar=cv.toDataURL('image/jpeg',0.85); await idbPut('clients',c); openClient(id);
-    }; im.src=r.result; };
-    r.readAsDataURL(f);
-  };
-  inp.click();
-}
-function openClientMenu(id){
-  const c=S.clients.find(x=>x.id===id); if(!c) return;
-  openSheet(c.name||'Клиент',`<div class="btn-row">
-    <button class="btn btn-block" onclick='closeSheet();closeModal();openClientForm(${jattr(c)})'>${icon('edit')} Редактировать</button>
-    <button class="btn btn-block" onclick="closeSheet();openMessageTemplates('${id}')">${icon('message')} Готовые сообщения</button>
-    <button class="btn btn-block btn-danger" onclick="closeSheet();closeModal();deleteClient('${id}')">Удалить клиента</button></div>`);
-}
-function openClient(id,tab){
-  const c=S.clients.find(x=>x.id===id); if(!c) return;
-  const events=S.events.filter(e=>e.clientId===id).sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const payments=S.payments.filter(p=>p.clientId===id).sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const photos=S.photos.filter(p=>p.clientId===id);
-  const projects=S.projects.filter(p=>p.clientId===id);
-  const initials=(c.name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
-  tab=tab||'info';
-  const stCol={'Новый':'#3ddc84','Постоянный':'#3ddc84','VIP':'#f1c40f','Ожидает ответа':'#f1c40f','Запланирован повторный визит':'#60a5fa','Давно не был':'#ff3d47','Потерянный клиент':'#ff3d47','Неактивный':'#777'}[c.status]||'#777';
-  openModal(`<div class="cl-top"><button class="sh-back" onclick="closeModal()" aria-label="Назад">${icon('chevron')}</button><span class="cl-ttl">Клиент</span><span style="flex:1"></span><button class="cl-ib" onclick='closeModal();openClientForm(${jattr(c)})' aria-label="Редактировать">${icon('edit')}</button><button class="cl-ib" onclick="openClientMenu('${id}')" aria-label="Ещё">${icon('dots')}</button></div>
-  <div class="cl-hero">${c.avatar?`<img class="cl-bgimg" src="${c.avatar}" alt="">`:''}<button class="cl-av" onclick="pickClientAvatar('${id}')" aria-label="Фото клиента">${c.avatar?`<img src="${c.avatar}" alt="">`:esc(initials)}</button><div style="min-width:0"><h2 class="cl-name">${esc(c.name)}</h2><div class="cl-st"><i style="background:${stCol};box-shadow:0 0 8px ${stCol}"></i><span style="color:${stCol}">${esc(c.status||'Без статуса')}</span></div></div></div>
-  <div class="cl-actions">
-    <button class="btn btn-primary" onclick="closeModal();go('calendar');openEventForm(null,{clientId:'${id}'})">${icon('plus')} Новая запись</button>
-    <button class="btn" onclick="openMessageTemplates('${id}')">${icon('message')} Сообщение</button>
-  </div>
-  <div class="cl-tabs">
-    ${['info','history','projects','photos','anketa'].map(t=>`<button data-t="${t}" class="${tab===t?'active':''}">${{info:'Основное',history:'История',projects:'Проекты',photos:'Фото',anketa:'Анкета'}[t]}</button>`).join('')}
-  </div>
-  <div id="clientTabBody"></div>`);
-  $('#modalBody').classList.add('client-screen'); $('#modalOverlay').classList.add('client-open');
-  $$('#bottomnav .navbtn').forEach(el=>el.classList.toggle('active',el.dataset.route==='clients'));
-  $$('#modalBody .cl-tabs button').forEach(b=>b.onclick=()=>openClient(id,b.dataset.t));
-  const body=$('#clientTabBody');
-  if(tab==='info'){
-    const lastIso=c.lastVisit||(events.find(e=>e.date<=todayISO()&&e.status!=='cancelled')||{}).date||'';
-    const dAgo=lastIso?Math.floor((Date.now()-new Date(lastIso))/864e5):null;
-    const plr=(n,a,b2,c2)=>(n%10===1&&n%100!==11)?a:([2,3,4].includes(n%10)&&![12,13,14].includes(n%100))?b2:c2;
-    let agoTxt='', agoCls='dim';
-    if(dAgo!==null&&dAgo>=0){
-      if(dAgo<1){ agoTxt='Сегодня'; }
-      else if(dAgo<45){ agoTxt=dAgo+' '+plr(dAgo,'день','дня','дней')+' назад'; }
-      else { const m=Math.floor(dAgo/30.4); agoTxt='Не был: '+m+' '+plr(m,'месяц','месяца','месяцев'); agoCls='bad'; }
-    }
-    const visits=Number(c.visits||0)||events.filter(e=>e.status==='completed').length;
-    const sum=Number(c.totalSum||0), avg=visits?sum/visits:0;
-    const lnk=(key,label,href)=>c[key]?`<a class="cl-link ${key}" href="${href(String(c[key]))}" target="_blank" rel="noopener">${icon(key)}<span>${label}</span></a>`:'';
-    const links=[
-      lnk('telegram','Telegram',v=>'https://t.me/'+esc(v.replace('@','').replace(/^https?:\/\/t\.me\//,''))),
-      lnk('instagram','Instagram',v=>'https://instagram.com/'+esc(v.replace('@','').replace(/^https?:\/\/(www\.)?instagram\.com\//,''))),
-      lnk('vk','ВКонтакте',v=>/^https?:\/\//.test(v)?esc(v):'https://vk.com/'+esc(v.replace('@',''))),
-      lnk('max','MAX',v=>/^https?:\/\//.test(v)?esc(v):'#'),
-      c.whatsapp?`<a class="cl-link whatsapp" href="https://wa.me/${esc(String(c.whatsapp).replace(/[^0-9]/g,''))}" target="_blank" rel="noopener">${icon('phone')}<span>WhatsApp</span></a>`:''
-    ].join('');
-    const det=[['Город',[c.city,c.country].filter(Boolean).join(', ')],['Откуда приехал',c.cameFrom],['Источник',c.source],['Стили',c.styles],['Зоны',c.zones],['Первый визит',c.firstVisit?fmtDate(c.firstVisit):''],['Следующий контакт',c.nextContact?fmtDate(c.nextContact):'']].filter(r=>r[1]);
-    body.innerHTML=`
-    <div class="cl-card"><div class="cl-lbl">Контакты</div>
-      ${c.phone?`<a class="cl-phone" href="tel:${esc(c.phone)}">${icon('phone')}<span>${esc(c.phone)}</span>${icon('chevron')}</a>`:`<button class="cl-add" onclick="openContactFillSheet('${id}','phone','Телефон')">${icon('plus')} Добавить телефон</button>`}
-      ${links?`<div class="cl-links">${links}</div>`:`<button class="cl-add" onclick='closeModal();openClientForm(${jattr(c)})'>${icon('plus')} Добавить соцсети</button>`}
+  <button class="btn skip" id="skipSplash">Пропустить</button>
+</div>
+
+<div class="pin-screen hidden" id="pinScreen">
+  <div class="graffiti" style="font-size:22px">INK.OS</div>
+  <div class="pin-dots" id="pinDots"></div>
+  <div class="pin-pad" id="pinPad"></div>
+  <div class="small dim" id="pinMsg"></div>
+</div>
+
+<div class="bgpattern" id="bgPattern"></div>
+
+<div id="app" class="hidden">
+  <div id="topbar">
+    <div class="brand" onclick="go('dashboard')" style="cursor:pointer"><span class="logo">INK<b>.OS</b></span><span id="topbarSub"></span></div>
+    <div style="display:flex;gap:8px">
+      <button class="bell-btn" id="searchBtn" aria-label="Поиск">
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg>
+      </button>
+      <button class="bell-btn hidden" id="tipsBtn" aria-label="Советы владельцу">
+        <svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.9v.2h5v-.2c0-.8.4-1.5 1-1.9A6 6 0 0 0 12 3Z"/></svg>
+        <span class="bell-badge hidden" id="tipsCount"></span>
+      </button>
+      <button class="bell-btn" id="notifBtn" aria-label="Уведомления">
+        <svg class="ico" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+        <span class="bell-badge hidden" id="notifCount"></span>
+      </button>
+      <button class="bell-btn" id="lockBtn" aria-label="Блокировка">
+        <svg class="ico" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+      </button>
     </div>
-    <div class="cl-card"><div class="cl-lbl">Последний визит</div>
-      <div class="cl-row"><span class="cl-ic">${icon('calendar')}</span><span>${lastIso?new Date(lastIso).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}):'Визитов пока не было'}</span>${agoTxt?`<span class="cl-ago ${agoCls}">${agoTxt}</span>`:''}</div>
-    </div>
-    <div class="cl-card"><div class="cl-lbl">Проекты</div>
-      ${projects.length?projects.map(pr=>{ const pg=projectProgress(pr), done=pg.pct>=100; return `<div class="cl-proj" onclick="closeModal();openProject('${pr.id}')"><span class="cl-pi ${done?'ok':''}">${icon('projects')}</span><div class="cl-pb"><div class="row"><b>${esc(pr.title)}</b>${done?'<span class="cl-done">Завершён</span>':`<span class="dim small">${pg.pct}%</span>`}</div>${done?'':`<div class="cl-bar"><div style="width:${pg.pct}%"></div></div>`}</div></div>`; }).join(''):`<button class="cl-add" onclick="closeModal();openProjectForm({clientId:'${id}'})">${icon('plus')} Новый проект</button>`}
-    </div>
-    <div class="cl-card"><div class="cl-lbl">История</div>
-      <div class="cl-row"><span class="cl-ic">${icon('coin')}</span><span><b>${visits}</b> ${plr(visits,'визит','визита','визитов')} · <b>${finVal(fmtMoney(sum))}</b></span><span class="cl-ago dim">Средний чек · ${finVal(fmtMoney(avg))}</span></div>
-    </div>
-    <div class="cl-bottom">
-      <button onclick="openClient('${id}','anketa')">${icon('consents')}<span>Анкета</span></button>
-      <button onclick="openClient('${id}','photos')">${icon('camera')}<span>Фото</span></button>
-      <button onclick="openClient('${id}','payments')">${icon('coin')}<span>Финансы</span></button>
-    </div>
-    ${det.length||(c.quickNotes||[]).length?`<div class="cl-card"><div class="cl-lbl">Подробнее</div>${det.map(r=>`<div class="kv"><span>${r[0]}</span><span>${esc(r[1])}</span></div>`).join('')}${(c.quickNotes||[]).length?`<div style="margin-top:8px">${c.quickNotes.map(n=>`<span class="chip active">${esc(n)}</span>`).join('')}</div>`:''}</div>`:''}
-    `;
-  } else if(tab==='history'){
-    body.innerHTML = events.length? events.map(e=>`<div class="card" style="margin-bottom:6px"><div class="row"><b>${EVENT_TYPES[e.type]?.label}</b><span class="small dim">${fmtDate(e.date)}</span></div><div class="small dim">${e.comment||''}</div></div>`).join('') : '<p class="dim">Записей нет.</p>';
-  } else if(tab==='projects'){
-    body.innerHTML = `<button class="btn btn-sm btn-primary" style="margin-bottom:10px" onclick="closeModal();openProjectForm({clientId:'${id}'})">+ Новый проект</button>` +
-      (projects.length? projects.map(p=>{
-        const prog=projectProgress(p);
-        return `<div class="card" style="margin-bottom:8px;cursor:pointer" onclick="closeModal();openProject('${p.id}')">
-          <div class="row"><b>${esc(p.title)}</b><span class="small dim">${prog.pct}%</span></div>
-          <div class="small dim">${esc(p.zone||'')}</div>
-          <div class="progress-track"><div style="width:${prog.pct}%"></div></div>
-        </div>`;
-      }).join('') : '<p class="dim">Проектов нет.</p>');
-  } else if(tab==='payments'){
-    body.innerHTML = payments.length? `<table><tr><th>Дата</th><th>Сумма</th><th>Способ</th><th>Статус</th></tr>${payments.map(p=>`<tr><td>${fmtDate(p.date)}</td><td>${fmtMoney(p.amount)}</td><td>${p.method||''}</td><td>${p.status||''}</td></tr>`).join('')}</table>` : '<p class="dim">Оплат нет.</p>';
-  } else if(tab==='photos'){
-    body.innerHTML = photos.length? `<div class="grid grid-3">${photos.map(p=>`<img src="${p.processedDataUrl||p.dataUrl}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover">`).join('')}</div>` : '<p class="dim">Фото нет. Загрузите в разделе «Фото».</p>';
-  } else if(tab==='anketa'){
-    const consents=S.consents.filter(x=>x.clientId===id);
-    body.innerHTML=`
-    <div class="kv"><span>Дата рождения</span><span>${c.birthDate?fmtDate(c.birthDate):'—'}</span></div>
-    <div class="kv"><span>Как узнал о мастере</span><span>${esc(c.source)||'—'}</span></div>
-    <div class="kv"><span>Любимые стили</span><span>${esc(c.styles)||'—'}</span></div>
-    <div class="kv"><span>Зоны тела</span><span>${esc(c.zones)||'—'}</span></div>
-    <div style="margin-top:10px"><label style="margin:0">Аллергии / важная информация</label>
-      <div class="card" style="margin-top:6px;${c.allergies?'border-color:var(--yellow)':''}">${c.allergies?esc(c.allergies):'<span class="dim">Не указано</span>'}</div>
-    </div>
-    <div style="margin-top:10px"><label style="margin:0">Комментарий</label>
-      <div class="card" style="margin-top:6px">${c.comment?esc(c.comment):'<span class="dim">Не указано</span>'}</div>
-    </div>
-    <div style="margin-top:10px">${(c.quickNotes||[]).map(n=>`<span class="chip active">${esc(n)}</span>`).join('')}</div>
-    <button class="btn btn-sm" style="margin-top:10px" onclick='closeModal();openClientForm(${jattr(c)})'>Заполнить / изменить анкету</button>
-    <h4 style="margin-top:16px">Согласия и подписи</h4>
-    ${Object.entries(CONSENT_TYPES).map(([key,def])=>{
-      const rec=consents.filter(x=>x.type===key).sort((a,b)=>(b.signedAt||0)-(a.signedAt||0))[0];
-      return `<div class="card" style="margin-bottom:8px">
-        <div class="row"><b class="small">${def.label}</b>${rec?`<span class="badge badge-regular">Подписано ${fmtDate(rec.signedAt)}</span>`:`<span class="badge badge-wait">Не подписано</span>`}</div>
-        <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:6px">
-          <button class="btn btn-sm" onclick="closeModal();openConsentForm('${id}','${key}')">${rec?'Пересмотреть / переподписать':'Заполнить и подписать'}</button>
-          ${rec?`<button class="btn btn-sm" onclick="downloadConsentPdf('${rec.id}')">PDF / печать</button>`:''}
-        </div>
-      </div>`;
-    }).join('')}
-    `;
+  </div>
+  <div id="main">
+    <div id="sidebar"></div>
+    <div id="content"></div>
+  </div>
+  <div id="bottomnav"></div>
+</div>
+
+<div id="moreSheet"><div class="sheet" id="moreSheetInner"></div></div>
+<div class="modal-overlay" id="modalOverlay"><div class="modal" id="modalBody"></div></div>
+<div id="genericSheetOverlay"><div class="gsheet" id="genericSheetBody"></div></div>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* ====================== APP STATE / CONSTANTS ====================== */
+const DB_NAME='inkos_db', DB_VER=4;
+let db=null;
+const STORES=['clients','events','payments','finance','tattooWork','photos','students','homework','inventory','cartridgeUsage','healingFilmSales','guestSpots','cities','reminders','tasks','notifications','settings','backups','projects','consents','auditLog'];
+const EVENT_TYPES={
+  session:{label:'Сеанс',color:'#20B2AA'},
+  consult:{label:'Консультация',color:'#F4C542'},
+  correction:{label:'Коррекция',color:'#E53935'},
+  model:{label:'Модель',color:'#8E44AD'},
+  dayoff:{label:'Выходной',color:'#FF7F50'},
+  study:{label:'Учёба',color:'#2563EB'},
+  university:{label:'Учёба в университете',color:'#60A5FA'},
+  cleaning:{label:'Генеральная уборка',color:'#808080'},
+  other:{label:'Другое',color:'#666666'}
+};
+const PAY_METHODS=['Карта','Наличные','Перевод','Рассрочка','Другое'];
+const SERVICE_TYPES=['Тату'];
+const BODY_ZONES=['Рука','Предплечье','Плечо','Кисть','Нога','Голень','Бедро','Стопа','Спина','Грудь','Живот','Шея','Голова','Другое'];
+const STYLE_TAGS=['Олдскул','Традиционный','Неотрад','Ньюскул','Япония','Дарк леттеринг','Орнаментал','Полинезия','Цветной реализм','Биомеханика','Трайбл','Графика','Леттеринг','Black & Grey','Блэкворк','Минимализм','Cyber Sigil','Другое'];
+const PAY_STATUS=['Не оплачено','Бронирование даты получено','Частично оплачено','Оплачено полностью','Возвращено','Рассрочка','Ожидается оплата'];
+const CLIENT_STATUS=['Новый','Постоянный','VIP','Давно не был','Ожидает ответа','Запланирован повторный визит','Неактивный','Потерянный клиент'];
+const MASTER_NAME='Рамзес (Роман Долженко)';
+const CONSENT_TYPES={
+  health:{
+    label:'Подтверждение (нет противопоказаний)',
+    title:'ПОДТВЕРЖДЕНИЕ',
+    extraFields:[
+      {key:'bookingAmount',label:'Сумма за бронирование даты'},
+      {key:'tattooType',label:'Тип татуировки'},
+      {key:'price',label:'Стоимость работы'}
+    ],
+    text:`ПОДТВЕРЖДЕНИЕ
+Пожалуйста, внимательно прочитайте каждый из следующих пунктов:
+1. Мастер гарантирует, что татуировка будет выполнена в стерильных условиях и с помощью специальных стерильных разовых инструментов.
+2. Я понимаю, что татуировка — это травма, которая может вызвать обострение любого хронического заболевания, в том числе простуды, гриппа, диабета, аллергии, синдрома иммунодефицита, гепатита, наркологической зависимости и др. В том случае, если я болен каким-либо из вышеперечисленных заболеваний, я обязан сообщить об этом мастеру перед татуированием. Я также обязан сообщить мастеру о всех перенесённых травмах и операциях, которым я подвергался(лась).
+Примечание: хотя наличие одного или более перечисленных условий не является противопоказанием для татуирования, мастеру необходимо об этом знать. Если вы не уверены в своём здоровье, желательно перед татуированием посетить врача.
+3. Я согласен(на) следовать процедурам, описанным в приложении (Рекомендация по уходу за татуировкой) в течение рекомендованного периода, и понимаю, что в результате невыполнения их у меня могут возникнуть проблемы. Я также понимаю, что в случае какого-либо, в связи с этим, воспаления мастер ответственности не несёт.
+4. Я также понимаю, что в результате татуирования у меня может возникнуть аллергическая реакция на краситель или лекарственное средство.
+
+Мною внесена сумма за бронирование даты в сумме {bookingAmount} в счёт оплаты за предстоящую процедуру. Я ознакомлен(а) о том, что если я по каким-либо причинам отменю процедуру, внесённая сумма за бронирование даты мне не возвратится.
+
+Я подтверждаю, что ознакомлен(а) с этим документом, понял(а) и согласен(а) со всеми пунктами этого документа.
+
+Ф.И.О.: {clientName}
+Адрес, контактный телефон: {clientContact}
+
+Тип татуировки: {tattooType}
+Стоимость работы: {price} (минимальная, по объёму, за сеанс)
+Мастер: ${MASTER_NAME}
+Дата: {date}`
+  },
+  minor:{
+    label:'Согласие родителя (до 18 лет)',
+    title:'СОГЛАСИЕ ЗАКОННОГО ПРЕДСТАВИТЕЛЯ на нанесение татуировки несовершеннолетнему',
+    extraFields:[
+      {key:'childId',label:'Документ несовершеннолетнего (при наличии)'},
+      {key:'parentBirth',label:'Дата рождения представителя',type:'date'},
+      {key:'parentDoc',label:'Документ представителя (серия, номер, кем выдан)'},
+      {key:'parentPhone',label:'Телефон представителя'},
+      {key:'parentStatus',label:'Статус представителя',type:'select',options:['Родитель (мать)','Родитель (отец)','Усыновитель','Опекун','Попечитель']},
+      {key:'guardianBasis',label:'Основание полномочий опекуна/попечителя (если применимо)'},
+      {key:'sketch',label:'Эскиз / описание татуировки'},
+      {key:'placement',label:'Место нанесения на теле'},
+      {key:'size',label:'Ориентировочный размер'},
+      {key:'color',label:'Цвет',type:'select',options:['чёрно-серая','цветная','иное']}
+    ],
+    text:`СОГЛАСИЕ ЗАКОННОГО ПРЕДСТАВИТЕЛЯ
+на нанесение татуировки несовершеннолетнему
+
+Исполнитель: тату-мастер ${MASTER_NAME}
+Дата: {date}
+
+1. Данные несовершеннолетнего
+ФИО: {clientName}
+Дата рождения: {clientBirth}
+Документ, удостоверяющий личность (при наличии): {childId}
+
+2. Данные родителя / законного представителя
+ФИО: {parentName}
+Дата рождения: {parentBirth}
+Документ: {parentDoc}
+Телефон: {parentPhone}
+Статус законного представителя: {parentStatus}
+Основание полномочий опекуна/попечителя (если применимо): {guardianBasis}
+
+3. Моё согласие
+Я, указанный(ая) выше родитель / законный представитель, подтверждаю, что являюсь законным представителем несовершеннолетнего и добровольно даю своё письменное согласие на нанесение ему/ей татуировки тату-мастером ${MASTER_NAME}.
+
+Согласие даётся на конкретную татуировку:
+Эскиз / описание: {sketch}
+Место нанесения на теле: {placement}
+Ориентировочный размер: {size}
+Цвет: {color}
+
+4. Подтверждение информированности
+Мне разъяснено и понятно, что нанесение татуировки связано с повреждением кожного покрова и может сопровождаться, в частности: болевыми ощущениями, покраснением, отёком и временным раздражением кожи; необходимостью правильного ухода за татуировкой до её полного заживления; риском воспаления, инфекции, аллергической реакции, рубцевания, изменения пигмента и иных индивидуальных реакций организма; необходимостью соблюдать рекомендации мастера по уходу и своевременно обращаться за медицинской помощью при выраженных или необычных симптомах.
+Я понимаю, что мастер не является медицинским работником и данный документ не является информированным добровольным согласием на медицинское вмешательство.
+
+5. Подтверждения законного представителя
+Подписывая этот документ, я подтверждаю каждый из следующих пунктов:
+— я сообщил(а) мастеру достоверные сведения о несовершеннолетнем;
+— мне предоставлена возможность задать вопросы до начала процедуры, и я получил(а) ответы на них;
+— я понимаю характер процедуры, возможные риски и последствия нанесения татуировки;
+— я согласен(на) на выполнение именно той работы, которая описана в разделе 3 настоящего документа;
+— я понимаю, что после нанесения татуировки её удаление или изменение может потребовать дополнительных процедур и не гарантирует полного восстановления первоначального вида кожи;
+— я подтверждаю добровольность настоящего согласия и отсутствие давления со стороны исполнителя или третьих лиц.
+
+6. Согласие несовершеннолетнего
+Несовершеннолетний также подтверждает, что понимает характер планируемой процедуры, желает получить указанную татуировку и не возражает против её нанесения.
+Подпись несовершеннолетнего: ____________________________    Дата: {date}
+
+7. Документы
+Перед началом процедуры исполнитель вправе потребовать предъявить оригиналы документов, подтверждающих личность несовершеннолетнего и законного представителя, а при необходимости — документ, подтверждающий полномочия опекуна или попечителя.
+
+Примечание. Настоящий документ является частным шаблоном согласия и не заменяет юридическую консультацию.`
+  },
+  photo:{
+    label:'Согласие на публикацию фото',
+    title:'СОГЛАСИЕ КЛИЕНТА на фотографирование татуировки и размещение фотографий в сети Интернет',
+    extraFields:[
+      {key:'faceConsent',label:'Вариант согласия на изображение',type:'select',options:['Согласен(на) — лицо НЕ видно','Согласен(на) — лицо видно','НЕ согласен(на) на фото с лицом']},
+      {key:'nickname',label:'Разрешаю указывать имя/ник (необязательно)'}
+    ],
+    text:`СОГЛАСИЕ КЛИЕНТА
+на фотографирование татуировки и размещение фотографий в сети Интернет
+
+Исполнитель: тату-мастер ${MASTER_NAME}
+Дата: {date}    Город: {clientCity}
+
+Я, {clientName}, добровольно даю согласие тату-мастеру ${MASTER_NAME} на фотографирование выполненной мне татуировки и использование полученных фотографий на условиях настоящего согласия.
+
+1. На что я даю согласие
+— проведение фото- и/или видеосъёмки татуировки после процедуры, а при необходимости — во время процесса, если это заранее согласовано со мной;
+— обработку фотографий: кадрирование, коррекцию яркости, контраста, цвета и размера без изменения самой татуировки и искажения её внешнего вида;
+— размещение фотографий в сети Интернет и социальных сетях исполнителя, включая портфолио, сайт, страницы и группы во VK, Telegram, MAX, Instagram* и других используемых исполнителем площадках;
+— использование фотографий в рекламных и информационных материалах, связанных с деятельностью тату-мастера, в том числе в публикациях, рекламных объявлениях, подборках работ и на сайте.
+
+2. Моё изображение
+Выбранный вариант: {faceConsent}
+
+3. Идентифицирующая информация
+Без отдельного согласия исполнителю не следует указывать вместе с фотографией мои ФИО, телефон, адрес, дату рождения и иные сведения, позволяющие однозначно идентифицировать меня.
+Разрешённое имя/ник для указания: {nickname}
+
+4. Условия использования
+— Согласие предоставляется без выплаты мне вознаграждения за публикацию фотографий.
+— Срок действия согласия: без ограничения срока, если оно не будет отозвано мной в установленном порядке.
+— Я понимаю, что после размещения фотографии в сети Интернет она может быть скопирована или распространена третьими лицами.
+— Я подтверждаю, что согласие предоставлено добровольно и после ознакомления с условиями настоящего документа.
+
+5. Отзыв согласия
+Я вправе отозвать ранее данное согласие. Отзыв направляется исполнителю в письменной форме или иным способом, позволяющим подтвердить его получение. После получения отзыва исполнитель прекращает дальнейшее использование фотографии в пределах, предусмотренных законом и фактическими техническими возможностями удаления уже опубликованных материалов.
+
+6. Подтверждение
+Я ознакомлен(а) с настоящим документом, понимаю его содержание и добровольно выражаю своё согласие на указанные выше действия.
+
+ФИО клиента: {clientName}
+
+* Instagram — социальная сеть, деятельность которой запрещена/ограничена в РФ; упоминание площадки приведено только как пример канала размещения.
+Примечание: шаблон рассчитан на использование в РФ и не заменяет индивидуальную юридическую консультацию.`
   }
+};
+const QUICK_NOTES=['Любит поговорить','Предпочитает тишину','Любит обсуждать идеи','Предпочитает короткое общение','Хочет музыку','Хочет смотреть видео','Хочет продолжить проект','Пока не планирует продолжение'];
+const CARTRIDGE_CONFIGS=['RL','RS','M1','RM','CM'];
+const DEFAULT_THRESHOLDS={cartridge:10,transferPaper:20,pigmentBlack:2,pigmentColor:2,pigmentGray:2,pigmentWhite:2,oil:2,foam:2,lidocainePrimary:2,lidocaineSecondary:2,healingFilm:10};
+let S={ // in-memory cache after load
+  clients:[],events:[],payments:[],finance:[],tattooWork:[],photos:[],students:[],homework:[],
+  inventory:[],cartridgeUsage:[],healingFilmSales:[],guestSpots:[],cities:[],reminders:[],tasks:[],
+  notifications:[],settings:{},backups:[],projects:[],consents:[],auditLog:[]
+};
+let currentRoute='dashboard';
+let calState={view:'month',date:new Date(),filterType:null};
+
+/* ====================== UTIL ====================== */
+const $=s=>document.querySelector(s);
+const $$=s=>Array.from(document.querySelectorAll(s));
+const uid=()=>'id'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const fmtMoney=n=>{n=Number(n)||0;const cur=(S.settings&&S.settings.currency)||'₽';return n.toLocaleString('ru-RU',{maximumFractionDigits:0})+' '+cur;};
+const fmtDate=d=>{ if(!d) return '—'; const dt=(d instanceof Date)?d:new Date(d); return dt.toLocaleDateString('ru-RU'); };
+const fmtDateTime=d=>{ const dt=(d instanceof Date)?d:new Date(d); return dt.toLocaleDateString('ru-RU')+' '+dt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}); };
+const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+const daysBetween=(a,b)=>Math.floor((new Date(b)-new Date(a))/86400000);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(msg,type){
+  const w=$('#toastWrap');
+  const el=document.createElement('div');
+  el.className='toast';
+  el.textContent=msg;
+  w.appendChild(el);
+  setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity .4s';setTimeout(()=>el.remove(),400);},3500);
+}
+function openModal(html){
+  $('#modalOverlay').classList.remove('client-open'); $('#modalBody').classList.remove('client-screen');
+  $('#modalBody').innerHTML=html;
+  $('#modalOverlay').classList.add('open');
+}
+function closeModal(){
+  const was=$('#modalOverlay').classList.contains('client-open');
+  $('#modalOverlay').classList.remove('open','client-open'); $('#modalBody').classList.remove('client-screen'); $('#modalBody').innerHTML='';
+  if(was) $$('#bottomnav .navbtn').forEach(el=>el.classList.toggle('active',el.dataset.route===currentRoute));
+}
+$('#modalOverlay').addEventListener('click',e=>{ if(e.target.id==='modalOverlay') closeModal(); });
+function confirmDialog(msg,onYes){
+  openModal(`<div class="modal-header"><h3>Подтверждение</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <p>${esc(msg)}</p>
+  <div class="row" style="margin-top:14px"><button class="btn" onclick="closeModal()">Отмена</button>
+  <button class="btn btn-danger" id="confirmYesBtn">Подтвердить</button></div>`);
+  $('#confirmYesBtn').onclick=()=>{ closeModal(); onYes(); };
 }
 
-/* ====================== АНКЕТЫ / СОГЛАСИЯ (подпись + PDF) ====================== */
-let sigPad=null;
-function openConsentForm(clientId,type){
-  const c=S.clients.find(x=>x.id===clientId); if(!c) return;
-  const def=CONSENT_TYPES[type];
-  const existing=S.consents.filter(x=>x.clientId===clientId&&x.type===type).sort((a,b)=>(b.signedAt||0)-(a.signedAt||0))[0];
-  const baseVals={
-    clientName:c.name||'',
-    clientBirth:c.birthDate?fmtDate(c.birthDate):'',
-    clientContact:[c.phone,c.city].filter(Boolean).join(', '),
-    clientCity:c.city||'',
-    parentName:existing?.extra?.parentName||'',
-    date:todayISO()
-  };
-  (def.extraFields||[]).forEach(f=>{ baseVals[f.key]=existing?.extra?.[f.key]||''; });
-  const previewText=fillConsentTextPlain(def,baseVals);
-  openModal(`<div class="modal-header"><h3>${esc(def.label)}</h3><button class="x" onclick="closeModal()">✕</button></div>
-  <div class="card" style="white-space:pre-wrap;font-size:12.5px;line-height:1.5;margin-bottom:12px;max-height:240px;overflow-y:auto" id="consentTextBlock">${esc(previewText)}</div>
-  ${type==='minor'?`<label>ФИО родителя / законного представителя</label><input id="consentField_parentName" value="${esc(baseVals.parentName)}">`:''}
-  ${(def.extraFields||[]).map(f=>{
-    const val=baseVals[f.key]||'';
-    if(f.type==='select'){
-      return `<label>${esc(f.label)}</label><select id="consentField_${f.key}">${f.options.map(o=>`<option ${val===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+/* ====================== GLOBAL DOUBLE-SUBMIT GUARD ======================
+   Rapid double-tap on a submit button (common on touch devices, especially
+   with any perceived lag) used to create duplicate records, since none of
+   the ~18 forms in this app had their own submit lock. Fixed once, globally,
+   on the capture phase — runs before the form's own onsubmit handler. */
+document.addEventListener('submit', function(e){
+  const f=e.target;
+  if(!(f instanceof HTMLFormElement)) return;
+  const now=Date.now();
+  if(f._lastSubmitAt && now-f._lastSubmitAt<1000){
+    e.preventDefault(); e.stopImmediatePropagation();
+    return;
+  }
+  f._lastSubmitAt=now;
+}, true);
+
+/* ====================== UNDO-DELETE ("КОРЗИНА") ====================== */
+// Shows a toast with an "Отменить" button. Item stays in IndexedDB for `duration` ms
+// (removed only from the in-memory list + UI), so undo is instant and lossless.
+function showUndoToast(msg,onUndo,duration){
+  duration=duration||5000;
+  const w=$('#toastWrap');
+  const el=document.createElement('div');
+  el.className='toast'; el.style.display='flex'; el.style.alignItems='center'; el.style.gap='10px';
+  const span=document.createElement('span'); span.textContent=msg; span.style.flex='1';
+  const btn=document.createElement('button'); btn.textContent='Отменить'; btn.className='btn btn-sm btn-primary'; btn.style.flexShrink='0';
+  el.appendChild(span); el.appendChild(btn); w.appendChild(el);
+  let done=false;
+  const timer=setTimeout(()=>{ if(!done){ done=true; el.style.opacity='0'; el.style.transition='opacity .4s'; setTimeout(()=>el.remove(),400); } },duration);
+  btn.onclick=()=>{ if(done) return; done=true; clearTimeout(timer); el.remove(); onUndo&&onUndo(); };
+}
+// opts: {store, listKey, id, message, onChange, auditEntity, auditLabel}
+function trashDelete(opts){
+  const list=S[opts.listKey];
+  const idx=list.findIndex(x=>x.id===opts.id);
+  if(idx<0) return;
+  const item=list[idx];
+  list.splice(idx,1);
+  if(opts.onChange) opts.onChange();
+  let undone=false;
+  const timer=setTimeout(async()=>{
+    if(!undone){
+      await idbDel(opts.store,opts.id);
+      if(opts.auditEntity) logAudit('delete',opts.auditEntity,opts.auditLabel||'',`Удалено окончательно`);
     }
-    return `<label>${esc(f.label)}</label><input id="consentField_${f.key}" type="${f.type==='date'?'date':'text'}" value="${esc(val)}">`;
-  }).join('')}
-  <label>Дата</label><input type="date" id="consentDate" value="${baseVals.date}">
-  <label>Подпись${type==='minor'?' представителя':' клиента'} (нарисуйте пальцем или мышью)</label>
-  <div style="border:1px solid var(--line-red);border-radius:10px;background:#0d0908;overflow:hidden">
-    <canvas id="sigCanvas" style="width:100%;height:160px;display:block;touch-action:none"></canvas>
-  </div>
-  <div class="row" style="margin-top:8px">
-    <button type="button" class="btn btn-sm" onclick="clearSignature()">Очистить подпись</button>
-    <button type="button" class="btn btn-sm" onclick="refreshConsentPreview('${type}')">Обновить текст</button>
-  </div>
-  <button class="btn btn-primary btn-block" style="margin-top:14px" onclick="saveConsent('${clientId}','${type}')">Подписать и сохранить</button>
-  `);
-  setupSignaturePad();
-  $$('#modalBody input, #modalBody select').forEach(el=>{
-    if(el.id==='sigCanvas'||el.id==='consentDate') return;
-    el.addEventListener('input',()=>refreshConsentPreview(type));
-    el.addEventListener('change',()=>refreshConsentPreview(type));
+  },5000);
+  showUndoToast(opts.message||'Удалено.',()=>{
+    undone=true; clearTimeout(timer);
+    list.splice(idx,0,item);
+    if(opts.onChange) opts.onChange();
+    toast('Восстановлено');
   });
 }
-function collectConsentVals(clientId,type){
-  const c=S.clients.find(x=>x.id===clientId);
-  const def=CONSENT_TYPES[type];
-  const vals={
-    clientName:c?.name||'',
-    clientBirth:c?.birthDate?fmtDate(c.birthDate):'',
-    clientContact:[c?.phone,c?.city].filter(Boolean).join(', '),
-    clientCity:c?.city||'',
-    date:$('#consentDate')?.value||todayISO()
-  };
-  if(type==='minor') vals.parentName=$('#consentField_parentName')?.value||'';
-  (def.extraFields||[]).forEach(f=>{ vals[f.key]=$('#consentField_'+f.key)?.value||''; });
-  return vals;
+
+/* ====================== AUDIT LOG (история изменений) ====================== */
+function logAudit(action,entity,entityLabel,detail){
+  const rec={id:uid(),action,entity,entityLabel:entityLabel||'',detail:detail||'',ts:Date.now()};
+  idbPut('auditLog',rec);
+  S.auditLog.unshift(rec);
 }
-function fillConsentTextPlain(def,vals){
-  let text=def.text;
-  Object.entries(vals).forEach(([k,v])=>{
-    text=text.replace(new RegExp('\\{'+k+'\\}','g'), v && String(v).trim() ? v : '____________');
+function openAuditLogSheet(){
+  const ACTION_LABEL={edit:'Изменено',delete:'Удалено',create:'Создано'};
+  const entries=(S.auditLog||[]).slice().sort((a,b)=>b.ts-a.ts).slice(0,150);
+  openSheet('История изменений', entries.length? `
+    <p class="small dim" style="margin-bottom:8px">Последние ${entries.length} записей. Фиксируются изменения статусов, оплат и удаления записей.</p>
+    ${entries.map(r=>`<div class="small" style="padding:7px 0;border-bottom:1px dashed var(--line)">
+      <div><b>${ACTION_LABEL[r.action]||r.action}</b> · ${esc(r.entity)}${r.entityLabel?(' · '+esc(r.entityLabel)):''}</div>
+      ${r.detail?`<div class="dim">${esc(r.detail)}</div>`:''}
+      <div class="dim" style="font-size:10px;margin-top:2px">${fmtDateTime(r.ts)}</div>
+    </div>`).join('')}
+  ` : '<p class="dim">Изменений пока не зафиксировано.</p>');
+}
+
+/* openDrawer/closeDrawer are aliases of the app's existing openSheet/closeSheet bottom-sheet system (defined further below), kept for readability. */
+function openDrawer(title,bodyHtml){ openSheet(title,bodyHtml); }
+function closeDrawer(){ closeSheet(); }
+
+/* ====================== MINI CANVAS CHARTS (no external libs) ====================== */
+function drawBarChart(canvas,series,opts){
+  opts=opts||{};
+  const ctx=canvas.getContext('2d');
+  const w=canvas.width=canvas.clientWidth||300, h=canvas.height=opts.height||180;
+  ctx.clearRect(0,0,w,h);
+  const pad=28;
+  const max=Math.max(1,...series.map(s=>s.value));
+  const barW=(w-pad*2)/series.length;
+  ctx.strokeStyle='#2a2523'; ctx.beginPath(); ctx.moveTo(pad,h-24); ctx.lineTo(w-6,h-24); ctx.stroke();
+  series.forEach((s,i)=>{
+    const bh=(h-50)*(s.value/max);
+    const x=pad+i*barW+barW*0.15, y=h-24-bh, bw=barW*0.7;
+    ctx.fillStyle=s.color||'#c62b28';
+    ctx.fillRect(x,y,bw,bh);
+    ctx.fillStyle='#a89e98'; ctx.font='10px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(s.label,x+bw/2,h-10);
+    ctx.fillStyle='#eee8e4'; ctx.fillText(String(s.value),x+bw/2,y-4>10?y-4:10);
   });
-  return text;
 }
-function refreshConsentPreview(type){
-  const def=CONSENT_TYPES[type];
-  // find clientId from the currently open save button
-  const btn=$('#modalBody button.btn-primary');
-  if(!btn) return;
-  const m=(btn.getAttribute('onclick')||'').match(/saveConsent\('([^']+)'/);
-  const clientId=m?m[1]:null;
-  if(!clientId) return;
-  const vals=collectConsentVals(clientId,type);
-  $('#consentTextBlock').textContent=fillConsentTextPlain(def,vals);
-}
-function setupSignaturePad(){
-  const canvas=$('#sigCanvas'); if(!canvas) return;
+function drawLineChart(canvas,points,opts){
+  opts=opts||{};
+  const ctx=canvas.getContext('2d');
   const dpr=window.devicePixelRatio||1;
-  const rect=canvas.getBoundingClientRect();
-  canvas.width=rect.width*dpr; canvas.height=160*dpr;
-  const ctx=canvas.getContext('2d');
-  ctx.scale(dpr,dpr);
-  ctx.strokeStyle='#eee8e4'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round';
-  let drawing=false,last=null;
-  function pos(e){
-    const r=canvas.getBoundingClientRect();
-    const t=e.touches?e.touches[0]:e;
-    return {x:t.clientX-r.left,y:t.clientY-r.top};
+  const w=canvas.clientWidth||300, h=opts.height||180;
+  canvas.width=w*dpr; canvas.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  if(!points.length) return;
+  const padL=42,padR=10,padT=14,padB=22;
+  const max=Math.max(1,...points.map(p=>p.value));
+  const min=Math.min(0,...points.map(p=>p.value));
+  const plotW=w-padL-padR, plotH=h-padT-padB;
+  // gridlines + y labels
+  ctx.strokeStyle='#241c1c'; ctx.fillStyle='#6f655f'; ctx.font='9px sans-serif'; ctx.textAlign='right';
+  const steps=4;
+  for(let i=0;i<=steps;i++){
+    const val=min+(max-min)*i/steps;
+    const y=padT+plotH-(plotH*i/steps);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+    ctx.fillText(Math.round(val).toLocaleString('ru-RU'),padL-6,y+3);
   }
-  function start(e){ drawing=true; last=pos(e); e.preventDefault(); }
-  function move(e){
-    if(!drawing) return;
-    const p=pos(e);
-    ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
-    last=p; e.preventDefault();
-  }
-  function end(){ drawing=false; }
-  canvas.addEventListener('mousedown',start); canvas.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
-  canvas.addEventListener('touchstart',start,{passive:false}); canvas.addEventListener('touchmove',move,{passive:false}); canvas.addEventListener('touchend',end);
-  sigPad=canvas;
-}
-function clearSignature(){
-  if(!sigPad) return;
-  const ctx=sigPad.getContext('2d');
-  ctx.clearRect(0,0,sigPad.width,sigPad.height);
-}
-function isSignatureEmpty(canvas){
-  const ctx=canvas.getContext('2d');
-  const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
-  for(let i=3;i<data.length;i+=4){ if(data[i]!==0) return false; }
-  return true;
-}
-async function saveConsent(clientId,type){
-  const canvas=$('#sigCanvas');
-  if(!canvas || isSignatureEmpty(canvas)){ toast('Поставьте подпись перед сохранением'); return; }
-  const def=CONSENT_TYPES[type];
-  const vals=collectConsentVals(clientId,type);
-  const text=fillConsentTextPlain(def,vals);
-  const rec={id:uid(),clientId,type,label:def.label,title:def.title,text,extra:vals,signedAt:vals.date,signatureDataUrl:canvas.toDataURL('image/png')};
-  await idbPut('consents',rec); S.consents.push(rec);
-  closeModal(); toast('Анкета подписана и сохранена');
-  if(document.getElementById('clientTabBody')) openClient(clientId,'anketa');
-  if(currentRoute==='consents') RENDERERS.consents();
-  downloadConsentPdf(rec.id);
-}
-function jattr(o){ return JSON.stringify(o).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;'); }
-function loadImg(src){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
-async function consentPages(rec){
-  const c=S.clients.find(x=>x.id===rec.clientId);
-  const W=1240,H=1754,M=110,FONT='-apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-  const pages=[]; let cv,ctx,y;
-  const newPage=()=>{ cv=document.createElement('canvas'); cv.width=W; cv.height=H; ctx=cv.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#111'; y=M; pages.push(cv); };
-  const wrap=(text,font)=>{ ctx.font=font; const out=[]; String(text||'').split('\n').forEach(par=>{ if(!par.trim()){ out.push(''); return; } let line=''; par.split(/\s+/).forEach(w=>{ const t=line?line+' '+w:w; if(ctx.measureText(t).width>W-2*M && line){ out.push(line); line=w; } else line=t; }); out.push(line); }); return out; };
-  newPage();
-  const tf='700 40px '+FONT;
-  wrap(rec.title||rec.label,tf).forEach(l=>{ ctx.font=tf; ctx.fillText(l,M,y+40); y+=54; });
-  y+=10; ctx.fillStyle='#c62b28'; ctx.fillRect(M,y,W-2*M,4); ctx.fillStyle='#111'; y+=44;
-  const bf='400 27px '+FONT;
-  wrap(rec.text,bf).forEach(l=>{ if(y>H-M-40) newPage(); ctx.font=bf; ctx.fillStyle='#111'; ctx.fillText(l,M,y+27); y+=40; });
-  if(y>H-M-420) newPage(); else y+=30;
-  ctx.font='600 27px '+FONT; ctx.fillStyle='#111';
-  ctx.fillText('Клиент: '+(c?.name||'')+(c?.phone?' · '+c.phone:''),M,y+27); y+=46;
-  ctx.fillText('Дата подписания: '+fmtDate(rec.signedAt),M,y+27); y+=46;
-  ctx.fillText('Подпись:',M,y+27); y+=50;
-  try{
-    const img=await loadImg(rec.signatureDataUrl);
-    const t=document.createElement('canvas'); t.width=img.width; t.height=img.height;
-    const tc=t.getContext('2d'); tc.drawImage(img,0,0); tc.globalCompositeOperation='source-in'; tc.fillStyle='#0b1f6b'; tc.fillRect(0,0,t.width,t.height);
-    const w=560, h=Math.round(w*t.height/t.width);
-    ctx.strokeStyle='#999'; ctx.lineWidth=2; ctx.strokeRect(M,y,w,h);
-    ctx.drawImage(t,M,y,w,h); y+=h+20;
-  }catch(e){}
-  pages.forEach((p,i)=>{ const x=p.getContext('2d'); x.font='400 20px '+FONT; x.fillStyle='#777'; x.textAlign='right'; x.fillText('Стр. '+(i+1)+' из '+pages.length,W-M,H-50); });
-  return pages;
-}
-function buildPdf(jpegs){
-  const enc=new TextEncoder(), parts=[], offs=[]; let len=0;
-  const push=b=>{ const u=typeof b==='string'?enc.encode(b):b; parts.push(u); len+=u.length; };
-  const PW=595.28, PH=841.89, n=jpegs.length;
-  push('%PDF-1.4\n');
-  offs[1]=len; push('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
-  offs[2]=len; push('2 0 obj\n<< /Type /Pages /Count '+n+' /Kids ['+jpegs.map((_,i)=>(3+i*3)+' 0 R').join(' ')+'] >>\nendobj\n');
-  jpegs.forEach((j,i)=>{
-    const pn=3+i*3, cn=pn+1, im=pn+2, cs='q '+PW+' 0 0 '+PH+' 0 0 cm /Im0 Do Q';
-    offs[pn]=len; push(pn+' 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+PW+' '+PH+'] /Resources << /XObject << /Im0 '+im+' 0 R >> >> /Contents '+cn+' 0 R >>\nendobj\n');
-    offs[cn]=len; push(cn+' 0 obj\n<< /Length '+cs.length+' >>\nstream\n'+cs+'\nendstream\nendobj\n');
-    offs[im]=len; push(im+' 0 obj\n<< /Type /XObject /Subtype /Image /Width '+j.w+' /Height '+j.h+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+j.bytes.length+' >>\nstream\n'); push(j.bytes); push('\nendstream\nendobj\n');
-  });
-  const total=3+n*3, xr=len;
-  let x='xref\n0 '+total+'\n0000000000 65535 f \n';
-  for(let i=1;i<total;i++) x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';
-  push(x+'trailer\n<< /Size '+total+' /Root 1 0 R >>\nstartxref\n'+xr+'\n%%EOF');
-  return new Blob(parts,{type:'application/pdf'});
-}
-async function makeConsentPdf(rec){
-  const pages=await consentPages(rec);
-  const jpegs=pages.map(cv=>{ const d=cv.toDataURL('image/jpeg',0.92).split(',')[1]; const bin=atob(d); const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i); return {bytes,w:cv.width,h:cv.height}; });
-  return {blob:buildPdf(jpegs), imgs:pages.map(cv=>cv.toDataURL('image/jpeg',0.85))};
-}
-async function downloadConsentPdf(consentId){
-  const rec=S.consents.find(x=>x.id===consentId); if(!rec) return;
-  const c=S.clients.find(x=>x.id===rec.clientId);
-  openSheet('Документ: '+(rec.label||''),'<p class="dim small" id="docStatus">Готовлю PDF…</p><div id="docBody"></div>');
-  let res;
-  try{ res=await makeConsentPdf(rec); }catch(e){ const st=$('#docStatus'); if(st) st.textContent='Не удалось создать PDF: '+(e&&e.message||e); return; }
-  const body=$('#docBody'); if(!body) return;
-  $('#docStatus').textContent='Документ подписан и готов. Отправьте файл клиенту или распечатайте.';
-  const name=('Анкета_'+(c?.name||'клиент')+'_'+(rec.signedAt||'')+'.pdf').replace(/\s+/g,'_');
-  const file=new File([res.blob],name,{type:'application/pdf'});
-  const canShare=!!(navigator.canShare&&navigator.canShare({files:[file]}));
-  body.innerHTML=`<div class="btn-row" style="margin-bottom:12px">
-    ${canShare?'<button class="btn btn-primary btn-block" id="docShare">Отправить / сохранить PDF</button>':''}
-    <button class="btn ${canShare?'':'btn-primary'} btn-block" id="docDl">Скачать PDF</button>
-    <button class="btn btn-block" id="docPrint">Печать</button></div>
-    <p class="small dim">Предпросмотр. Если скачивание не сработало — нажмите и удерживайте страницу и выберите «Сохранить изображение».</p>
-    ${res.imgs.map(u=>`<img src="${u}" style="width:100%;display:block;margin:8px 0;border-radius:6px;background:#fff">`).join('')}`;
-  const dl=()=>downloadBlob(res.blob,name);
-  $('#docDl').onclick=()=>{ dl(); toast('PDF сохранён'); };
-  if(canShare) $('#docShare').onclick=async()=>{ try{ await navigator.share({files:[file],title:rec.title||rec.label}); }catch(e){ if(e&&e.name==='AbortError') return; dl(); toast('Отправка недоступна — файл скачан'); } };
-  $('#docPrint').onclick=()=>{
-    if(isNative()){ dl(); return; }
-    let pa=document.getElementById('printArea'); if(!pa){ pa=document.createElement('div'); pa.id='printArea'; document.body.appendChild(pa); }
-    pa.innerHTML=res.imgs.map(u=>`<img src="${u}">`).join('');
-    document.title='Анкета — '+(c?.name||'');
-    setTimeout(()=>window.print(),150);
-  };
+  const stepX=points.length>1?plotW/(points.length-1):0;
+  const xy=points.map((p,i)=>({x:padL+i*stepX,y:padT+plotH-(max===min?0:plotH*(p.value-min)/(max-min))}));
+  // filled area
+  const grad=ctx.createLinearGradient(0,padT,0,padT+plotH);
+  grad.addColorStop(0,'rgba(198,43,40,.35)'); grad.addColorStop(1,'rgba(198,43,40,0)');
+  ctx.beginPath(); ctx.moveTo(xy[0].x,padT+plotH);
+  xy.forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.lineTo(xy[xy.length-1].x,padT+plotH); ctx.closePath();
+  ctx.fillStyle=grad; ctx.fill();
+  // line
+  ctx.beginPath(); ctx.moveTo(xy[0].x,xy[0].y);
+  xy.forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.strokeStyle='#e5453f'; ctx.lineWidth=2; ctx.shadowColor='rgba(198,43,40,.6)'; ctx.shadowBlur=6; ctx.stroke(); ctx.shadowBlur=0;
+  // dots
+  ctx.fillStyle='#e5453f';
+  xy.forEach(p=>{ ctx.beginPath(); ctx.arc(p.x,p.y,2.6,0,7); ctx.fill(); });
+  // x labels (skip some if crowded)
+  ctx.fillStyle='#6f655f'; ctx.textAlign='center'; ctx.font='9px sans-serif';
+  const labelEvery=Math.max(1,Math.ceil(points.length/6));
+  points.forEach((p,i)=>{ if(i%labelEvery===0||i===points.length-1) ctx.fillText(p.label,padL+i*stepX,h-6); });
 }
 
-/* ====================== ПРОЕКТЫ (многосеансовые работы) ====================== */
-function projectProgress(p){
-  const sessions=S.events.filter(e=>e.projectId===p.id);
-  const total=Math.max(sessions.length,Number(p.sessionsPlanned||0));
-  const done=sessions.filter(e=>e.status==='completed').length;
-  const pct=total? Math.round(done/total*100) : 0;
-  return {done,total,pct,sessions:sessions.sort((a,b)=>new Date(a.date)-new Date(b.date))};
-}
-function openProjectForm(presets){
-  const p=(presets&&presets.existing)||{id:null,clientId:(presets&&presets.clientId)||'',title:'',zone:'',sessionsPlanned:4,totalCost:'',notes:''};
-  openModal(`<div class="modal-header"><h3>${p.id?'Проект':'Новый проект'}</h3><button class="x" onclick="closeModal()">✕</button></div>
-  <form id="projectForm">
-  <label>Клиент</label><select name="clientId" required>${S.clients.map(c=>`<option value="${c.id}" ${p.clientId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
-  <label>Название проекта</label><input required name="title" value="${esc(p.title)}" placeholder="напр. Рукав">
-  <label>Зона тела</label><input name="zone" value="${esc(p.zone)}" placeholder="напр. Правая рука">
-  <div class="field-row">
-    <div><label>Сеансов, шт.</label><input type="number" name="sessionsPlanned" value="${p.sessionsPlanned}" min="1"></div>
-    <div><label>Общая стоимость</label><input type="number" name="totalCost" value="${p.totalCost}"></div>
-  </div>
-  <label>Заметки</label><textarea name="notes" rows="2">${esc(p.notes)}</textarea>
-  <div class="row" style="margin-top:14px">${p.id?`<button type="button" class="btn btn-danger" onclick="deleteProject('${p.id}')">Удалить</button>`:'<span></span>'}<button class="btn btn-primary" type="submit">Сохранить</button></div>
-  </form>`);
-  $('#projectForm').onsubmit=async e=>{
-    e.preventDefault(); const fd=new FormData(e.target); const obj={...p}; fd.forEach((v,k)=>obj[k]=v); if(!obj.id) obj.id=uid();
-    await idbPut('projects',obj); const idx=S.projects.findIndex(x=>x.id===obj.id); if(idx>=0) S.projects[idx]=obj; else S.projects.push(obj);
-    closeModal(); toast('Проект сохранён'); openProject(obj.id);
-  };
-}
-function deleteProject(id){
-  const p=S.projects.find(x=>x.id===id);
-  confirmDialog('Удалить проект? Привязанные записи останутся в календаре, но потеряют связь с проектом.',()=>{
-    S.events.filter(e=>e.projectId===id).forEach(e=>{ e.projectId=''; idbPut('events',e); });
-    trashDelete({store:'projects',listKey:'projects',id,message:'Проект удалён.',auditEntity:'Проект',auditLabel:p?p.title:''});
+/* ====================== INDEXEDDB LAYER ====================== */
+function idbOpen(){
+  return new Promise((resolve,reject)=>{
+    if(!('indexedDB' in window)){ reject('no-idb'); return; }
+    const req=indexedDB.open(DB_NAME,DB_VER);
+    req.onupgradeneeded=e=>{
+      const d=e.target.result;
+      STORES.forEach(name=>{
+        if(!d.objectStoreNames.contains(name)){
+          const store=d.createObjectStore(name,{keyPath:'id'});
+          if(name!=='settings') store.createIndex('byUpdated','updatedAt',{unique:false});
+        }
+      });
+    };
+    req.onsuccess=e=>resolve(e.target.result);
+    req.onerror=e=>reject(e);
   });
 }
-function openProject(id){
-  const p=S.projects.find(x=>x.id===id); if(!p) return;
-  const c=S.clients.find(x=>x.id===p.clientId);
-  const prog=projectProgress(p);
-  const paid=prog.sessions.reduce((a,x)=>a+Number(x.bookingAmount||0),0)+S.payments.filter(pay=>prog.sessions.some(x=>x.id===pay.eventId)).reduce((a,pay)=>a+Number(pay.amount||0),0);
-  const total=Number(p.totalCost||0), remain=Math.max(0,total-paid);
-  const ph=S.photos.filter(x=>x.clientId===p.clientId).slice(-1)[0];
-  const bg=ph?(ph.processedDataUrl||ph.dataUrl):'';
-  const rows=[];
-  prog.sessions.forEach((x,i)=>{ const done=x.status==='completed', h=eventHours(x);
-    rows.push(`<div class="pj-s ${done?'ok':''}" onclick="closeModal();openEventView('${x.id}')"><span class="pj-d"></span><span class="pj-n">${i+1}</span><span class="pj-t">${esc(x.style||x.title||EVENT_TYPES[x.type]?.label||'Сеанс')}</span><span class="pj-h">${h?(+h.toFixed(1))+' ч':'—'}</span><span class="pj-c">${icon('check')}</span></div>`); });
-  for(let i=prog.sessions.length;i<prog.total;i++) rows.push(`<div class="pj-s empty" onclick="closeModal();go('calendar');openEventForm(null,{type:'session',clientId:'${p.clientId}',projectId:'${p.id}'})"><span class="pj-d"></span><span class="pj-n">${i+1}</span><span class="pj-t">Не запланирован</span><span class="pj-h">—</span><span class="pj-c">${icon('check')}</span></div>`);
-  openModal(`<div class="cl-top"><button class="sh-back" onclick="closeModal()" aria-label="Назад">${icon('chevron')}</button><span class="cl-ttl">Проект</span><span style="flex:1"></span><button class="cl-ib" onclick="openProjectMenu('${id}')" aria-label="Ещё">${icon('dots')}</button></div>
-  <div class="pj-hero">${bg?`<img class="pj-bg" src="${bg}" alt="">`:''}
-    <h2>${esc(p.title)}${p.zone?` <span>· ${esc(p.zone)}</span>`:''}</h2>
-    ${c?`<div class="who" onclick="closeModal();openClient('${c.id}')">${esc(c.name)}</div>`:''}</div>
-  <div class="cl-card"><div class="cl-lbl">Прогресс</div><div class="pj-prog"><div class="pj-bar"><div style="width:${prog.pct}%"></div></div><b>${prog.pct}%</b></div></div>
-  <div class="cl-card"><div class="cl-lbl">Сеансы</div>${rows.join('')||'<p class="dim small">Сеансов пока нет.</p>'}</div>
-  <div class="cl-card"><div class="cl-lbl">Общая стоимость</div><div class="pj-cost"><big>${fmtMoney(total)}</big><div class="kk"><div><span>Оплачено</span><span class="g">${fmtMoney(paid)}</span></div><div><span>Остаток</span><span class="r">${fmtMoney(remain)}</span></div></div></div></div>
-  <div class="pj-btns"><button class="add" onclick="closeModal();go('calendar');openEventForm(null,{type:'session',clientId:'${p.clientId}',projectId:'${p.id}'})">${icon('plus')} Добавить сеанс</button><button class="ph" onclick="closeModal();go('photos')">${icon('camera')} Фото</button></div>`);
-  $('#modalBody').classList.add('client-screen'); $('#modalOverlay').classList.add('client-open');
+function idbAll(store){
+  return new Promise((resolve,reject)=>{
+    if(!db){ resolve(S[store]||[]); return; }
+    const tx=db.transaction(store,'readonly');
+    const req=tx.objectStore(store).getAll();
+    req.onsuccess=()=>resolve(req.result||[]);
+    req.onerror=()=>reject(req.error);
+  });
 }
-function openProjectMenu(id){
-  const p=S.projects.find(x=>x.id===id); if(!p) return;
-  openSheet(p.title||'Проект',`<div class="btn-row"><button class="btn btn-block" onclick="closeSheet();closeModal();openProjectForm({existing:${jattr(p)}})">${icon('edit')} Редактировать</button></div>`);
-}
-let projectFilter='active';
-RENDERERS.projects=function(){
-  $('#content').innerHTML=`
-  <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Проекты</h2>
-    <button class="btn btn-primary btn-icon btn-sm" onclick="openProjectForm({})">${icon('plus')}</button></div>
-  <div class="tabbar" id="projFilterTabs">
-    <button data-f="active" class="${projectFilter==='active'?'active':''}">В работе</button>
-    <button data-f="done" class="${projectFilter==='done'?'active':''}">Завершённые</button>
-    <button data-f="all" class="${projectFilter==='all'?'active':''}">Все</button>
-  </div>
-  <div id="projList"></div>`;
-  $$('#projFilterTabs button').forEach(b=>b.onclick=()=>{ projectFilter=b.dataset.f; RENDERERS.projects(); });
-  renderProjectsList();
-};
-function renderProjectsList(){
-  let list=S.projects.slice();
-  const withProg=list.map(p=>({p,prog:projectProgress(p)}));
-  const filtered=withProg.filter(x=>projectFilter==='all'?true:(projectFilter==='done'?x.prog.pct>=100:x.prog.pct<100));
-  filtered.sort((a,b)=>b.prog.pct-a.prog.pct);
-  $('#projList').innerHTML = filtered.length? filtered.map(({p,prog})=>{
-    const c=S.clients.find(x=>x.id===p.clientId);
-    return `<div class="card" style="margin-bottom:8px;cursor:pointer" onclick="openProject('${p.id}')">
-      <div class="row"><b>${esc(p.title)}</b><span class="small" style="color:var(--red-soft);font-weight:700">${prog.pct}%</span></div>
-      <div class="small dim">${c?esc(c.name):'—'}${p.zone?(' · '+esc(p.zone)):''} · сеансов ${prog.done}/${prog.total}</div>
-      <div class="progress-track" style="margin-top:8px"><div style="width:${prog.pct}%"></div></div>
-    </div>`;
-  }).join('') : '<p class="dim">Проектов не найдено. Создайте новый или откройте раздел «Клиенты» → карточка клиента → «Проекты».</p>';
-}
-
-/* ====================== MESSAGE TEMPLATES ====================== */
-const DEFAULT_TEMPLATES={
-  week:'Привет, {name}! Прошла неделя после сеанса — как проходит восстановление татуировки? Если есть вопросы, пишите 🙂',
-  month:'Привет, {name}! Прошёл месяц с нашего сеанса. Как заживает тату? Если хочется продолжить проект — с радостью обсудим идею!',
-  twomonth:'Привет, {name}! Прошло два месяца с последнего сеанса. Как ощущения? Если появилась идея для продолжения — дайте знать. Буду благодарен за отзыв 🙏',
-  review:'Привет, {name}! Если тату понравилась — буду очень благодарен за отзыв, это очень помогает студии 🙏',
-  regular:'Привет, {name}! Рад был вас видеть на сеансе. Если захотите записаться снова — всегда рад!',
-  vip:'{name}, спасибо, что выбираете нашу студию! Для вас как для постоянного клиента всегда есть приоритет в записи.',
-  continue:'Привет, {name}! Помню, что мы хотели продолжить проект. Когда будет удобно запланировать следующий сеанс?'
-};
-function getTemplates(){ return {...DEFAULT_TEMPLATES, ...(S.settings.templates||{})}; }
-function openMessageTemplates(clientId){
-  const c=S.clients.find(x=>x.id===clientId);
-  const t=getTemplates();
-  openModal(`<div class="modal-header"><h3>Готовые сообщения</h3><button class="x" onclick="closeModal()">✕</button></div>
-  ${Object.entries(t).map(([k,v])=>`
-  <div class="card" style="margin-bottom:8px">
-    <div class="small dim" style="margin-bottom:4px">${{week:'Через неделю',month:'Через месяц',twomonth:'Через два месяца',review:'Просьба об отзыве',regular:'Постоянному клиенту',vip:'VIP-клиенту',continue:'Продолжение проекта'}[k]||k}</div>
-    <textarea data-k="${k}" rows="3">${esc(c?v.replace('{name}',c.name):v)}</textarea>
-    <div class="row" style="margin-top:6px">
-      <button class="btn btn-sm" onclick="copyTemplateText(this)">Копировать</button>
-      <button class="btn btn-sm" onclick="shareTemplateText(this)">Поделиться</button>
-    </div>
-  </div>`).join('')}
-  <button class="btn btn-sm" onclick="saveTemplateEdits()">Сохранить как шаблон по умолчанию</button>
-  `);
-}
-function copyTemplateText(btn){
-  const ta=btn.closest('.card').querySelector('textarea');
-  navigator.clipboard?.writeText(ta.value).then(()=>toast('Скопировано')).catch(()=>toast('Не удалось скопировать — выделите текст вручную'));
-}
-function shareTemplateText(btn){
-  const ta=btn.closest('.card').querySelector('textarea');
-  if(navigator.share){ navigator.share({text:ta.value}).catch(()=>{}); }
-  else { toast('Функция «Поделиться» недоступна в этом браузере — используйте копирование.'); }
-}
-function saveTemplateEdits(){
-  const tpl={...(S.settings.templates||{})};
-  $$('#modalBody textarea[data-k]').forEach(ta=>tpl[ta.dataset.k]=ta.value.replace(/^.*?, /,'{name}, ')); // keep generic-ish
-  S.settings.templates=tpl; saveSettings(); toast('Шаблоны обновлены');
-}
-
-/* ====================== CALENDAR ====================== */
-RENDERERS.calendar=function(){
-  $('#content').innerHTML=`
-  <div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:10px">
-    <span></span>
-    <div style="display:flex;gap:6px">
-      <button class="btn btn-icon btn-sm" onclick="openCalFilters()" title="Фильтры и загрузка">${icon('chart')}</button>
-      <button class="btn btn-primary btn-icon btn-sm" onclick="openCalQuickAdd()" title="Добавить">${icon('plus')}</button>
-    </div>
-  </div>
-  <div class="tabbar" id="calViewTabs">
-    ${['day','week','month','list'].map(v=>`<button data-v="${v}" class="${calState.view===v?'active':''}">${{day:'День',week:'Неделя',month:'Месяц',list:'Список'}[v]}</button>`).join('')}
-  </div>
-  <div class="row" style="margin:10px 0">
-    <button class="btn btn-icon btn-sm" onclick="calNav(-1)">${icon('chevron')}</button>
-    <b id="calLabel" style="font-size:13px;text-align:center;flex:1"></b>
-    <button class="btn btn-icon btn-sm" style="transform:scaleX(-1)" onclick="calNav(1)">${icon('chevron')}</button>
-  </div>
-  ${calState.filterType?`<div class="row small" style="margin-bottom:8px"><span>Фильтр: <b style="color:${EVENT_TYPES[calState.filterType]?.color}">${EVENT_TYPES[calState.filterType]?.label}</b></span><button class="btn btn-sm" onclick="calFilterType(null)">✕ Сбросить</button></div>`:''}
-  <div id="calGrid" style="max-height:calc(100vh - 320px);overflow-y:auto"></div>`;
-  $$('#calViewTabs button').forEach(b=>b.onclick=()=>{ calState.view=b.dataset.v; RENDERERS.calendar(); });
-  renderCalGrid();
-};
-function openCalQuickAdd(){
-  openSheet('Добавить', `<div class="btn-row">
-    <button class="btn btn-block" onclick="closeSheet();openEventForm(null,{type:'session'})">${icon('plus')} Сеанс</button>
-    <button class="btn btn-block" onclick="closeSheet();openEventForm(null,{type:'consult'})">${icon('plus')} Консультация</button>
-    <button class="btn btn-block" onclick="closeSheet();go('training');openStudentForm()">${icon('plus')} Ученик</button>
-    <button class="btn btn-block" onclick="closeSheet();openTaskForm()">${icon('plus')} Задача</button>
-  </div>`);
-}
-function openCalFilters(){
-  const evs=periodEvents('month');
-  const total=evs.length||1;
-  const rows=Object.entries(EVENT_TYPES).filter(([k])=>k!=='other').map(([k,def])=>{
-    const list=evs.filter(e=>e.type===k);
-    const hours=list.reduce((s,e)=>s+eventHours(e),0);
-    const pct=Math.round(list.length/total*100);
-    return `<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line);cursor:pointer" onclick="closeSheet();calFilterType('${k}')">
-      <span><span class="evt-dot" style="background:${def.color}"></span> ${def.label}</span>
-      <span class="dim">${list.length} · ${hours.toFixed(1)}ч · ${pct}%</span>
-    </div>`;
-  }).join('');
-  const busyHours=evs.filter(e=>['session','consult','correction','model'].includes(e.type)).reduce((s,e)=>s+eventHours(e),0);
-  const availHoursPerDay=(S.settings.workHoursEnd||20)-(S.settings.workHoursStart||10);
-  const daysInMonth=new Date(calState.date.getFullYear(),calState.date.getMonth()+1,0).getDate();
-  const availHours=availHoursPerDay*daysInMonth;
-  const load=Math.min(100,Math.round(busyHours/Math.max(1,availHours)*100));
-  const loadColor= load<60?'var(--green)': load<=85?'var(--yellow)':'var(--red-soft)';
-  openSheet('Фильтры и загрузка (месяц)', `
-    <div class="stat" style="margin-bottom:10px"><div class="num" style="color:${loadColor}">${load}%</div><div class="lbl">Загрузка · ${busyHours.toFixed(1)}ч занято из ${availHours}ч</div></div>
-    ${rows}
-    ${calState.filterType?`<button class="btn btn-block" style="margin-top:10px" onclick="closeSheet();calFilterType(null)">✕ Сбросить фильтр</button>`:''}
-  `);
-}
-function calNav(dir){
-  const d=new Date(calState.date);
-  if(calState.view==='day') d.setDate(d.getDate()+dir);
-  else if(calState.view==='week') d.setDate(d.getDate()+dir*7);
-  else d.setMonth(d.getMonth()+dir);
-  calState.date=d; renderCalGrid();
-}
-function periodEvents(period){
-  const now=new Date(calState.date);
-  let start,end;
-  if(period==='today'){ start=new Date(); end=new Date(); }
-  else if(period==='week'){ start=new Date(now); start.setDate(now.getDate()-now.getDay()+1); end=new Date(start); end.setDate(start.getDate()+6); }
-  else if(period==='month'){ start=new Date(now.getFullYear(),now.getMonth(),1); end=new Date(now.getFullYear(),now.getMonth()+1,0); }
-  else if(period==='quarter'){ const q=Math.floor(now.getMonth()/3); start=new Date(now.getFullYear(),q*3,1); end=new Date(now.getFullYear(),q*3+3,0); }
-  else { start=new Date(now.getFullYear(),0,1); end=new Date(now.getFullYear(),11,31); }
-  const s=start.toISOString().slice(0,10), e=end.toISOString().slice(0,10);
-  return S.events.filter(ev=>ev.date>=s && ev.date<=e);
-}
-function calFilterType(t){ calState.filterType=t; RENDERERS.calendar(); }
-function guestSpotsOnDate(iso){
-  return (S.guestSpots||[]).filter(g=>g.dateStart && g.dateEnd && iso>=g.dateStart && iso<=g.dateEnd);
-}
-function eventHours(e){
-  if(!e.start||!e.end) return e.duration?Number(e.duration)||0:0;
-  const [sh,sm]=String(e.start).split(':').map(Number), [eh,em]=String(e.end).split(':').map(Number);
-  const h=((eh*60+em)-(sh*60+sm))/60;
-  return isFinite(h)?Math.max(0,h):0;
-}
-function renderCalGrid(){
-  const evs = calState.filterType? S.events.filter(e=>e.type===calState.filterType) : S.events;
-  const d=calState.date;
-  if(calState.view==='month'){
-    $('#calLabel').textContent=d.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
-    const first=new Date(d.getFullYear(),d.getMonth(),1);
-    const startOffset=(first.getDay()+6)%7;
-    const daysInMonth=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
-    calState.sel=calState.sel||todayISO();
-    let cells='';
-    for(let i=0;i<startOffset;i++) cells+='<div></div>';
-    for(let day=1;day<=daysInMonth;day++){
-      const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-      const dots=[...new Set(evs.filter(e=>e.date===iso).map(e=>EVENT_TYPES[e.type]?.color))].slice(0,3).map(c=>`<i style="background:${c}"></i>`).join('');
-      cells+=`<button class="mc${iso===todayISO()?' today':''}${iso===calState.sel?' sel':''}" onclick="calSelect('${iso}')" ondblclick="openDayAdd('${iso}')"><span class="mn">${day}</span><span class="md">${dots}</span></button>`;
+function idbPut(store,obj){
+  obj.updatedAt=Date.now();
+  if(!obj.id) obj.id=uid();
+  return new Promise((resolve,reject)=>{
+    if(!db){ // localStorage fallback
+      const arr=S[store]||[]; const i=arr.findIndex(x=>x.id===obj.id);
+      if(i>=0) arr[i]=obj; else arr.push(obj);
+      S[store]=arr; persistLocalFallback();
+      resolve(obj); return;
     }
-    const selEvs=evs.filter(e=>e.date===calState.sel).sort((a,b)=>(a.start||'').localeCompare(b.start||''));
-    $('#calGrid').innerHTML=`<div class="mcal"><div class="mc-head">${['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(x=>`<span>${x}</span>`).join('')}</div><div class="mc-body">${cells}</div></div>
-    <div class="sel-head"><b>${new Date(calState.sel+'T00:00').toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'})}</b><button class="btn btn-sm" onclick="calSelect(todayISO())">Сегодня</button></div>
-    ${selEvs.length?selEvs.map(calEventRow).join(''):'<p class="dim small">На этот день событий нет.</p>'}`;
-  } else if(calState.view==='week'){
-    const start=new Date(d); start.setDate(d.getDate()-((d.getDay()+6)%7));
-    $('#calLabel').textContent='Неделя от '+fmtDate(start);
-    let html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">';
-    for(let i=0;i<7;i++){
-      const dd=new Date(start); dd.setDate(start.getDate()+i);
-      const iso=dd.toISOString().slice(0,10);
-      const dayEvs=evs.filter(e=>e.date===iso).sort((a,b)=>(a.start||'').localeCompare(b.start||''));
-      const gsToday=guestSpotsOnDate(iso);
-      html+=`<div class="card" onclick="openDaySummary('${iso}')" ondblclick="openDayAdd('${iso}')" style="cursor:pointer;min-height:120px${gsToday.length?';border-color:var(--pur)':''}">
-        <div class="small dim">${dd.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric'})}</div>
-        ${gsToday.map(g=>`<div class="evt-bar" style="background:var(--pur)">✈️ ${esc(g.city)}</div>`).join('')}
-        ${dayEvs.map(e=>`<div class="evt-bar" style="background:${EVENT_TYPES[e.type]?.color}">${e.start} ${clientOrLabel(e)}</div>`).join('')}
+    const tx=db.transaction(store,'readwrite');
+    tx.objectStore(store).put(obj);
+    tx.oncomplete=()=>resolve(obj);
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+function idbDel(store,id){
+  return new Promise((resolve,reject)=>{
+    if(!db){ S[store]=(S[store]||[]).filter(x=>x.id!==id); persistLocalFallback(); resolve(); return; }
+    const tx=db.transaction(store,'readwrite');
+    tx.objectStore(store).delete(id);    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+function persistLocalFallback(){
+  try{ localStorage.setItem('inkos_fallback_db',JSON.stringify(S)); }catch(e){}
+}
+function loadLocalFallback(){
+  try{ const raw=localStorage.getItem('inkos_fallback_db'); if(raw) Object.assign(S,JSON.parse(raw)); }catch(e){}
+}
+async function loadAllData(){
+  if(db){
+    for(const store of STORES){
+      if(store==='settings'){
+        const all=await idbAll('settings');
+        S.settings = all.length? all[0] : {id:'main',...defaultSettings()};
+      } else {
+        S[store]=await idbAll(store);
+      }
+    }
+  } else {
+    loadLocalFallback();
+    if(!S.settings || !S.settings.id) S.settings={id:'main',...defaultSettings()};
+  }
+}
+function defaultSettings(){
+  return {thresholds:{...DEFAULT_THRESHOLDS},logo:null,logoDark:null,pin:null,splash:'full',theme:'street',workHoursStart:10,workHoursEnd:20,leadTimeDays:7,reserve:3,currency:'₽'};
+}
+async function saveSettings(){ S.settings.id='main'; await idbPut('settings',S.settings); }
+
+/* ====================== NOTIFICATIONS ENGINE ====================== */
+function addNotification(text,kind,refId,extra){
+  const n=Object.assign({id:uid(),text,kind:kind||'info',refId:refId||null,createdAt:Date.now(),read:false},extra||{});
+  S.notifications.unshift(n);
+  idbPut('notifications',n);
+  if(kind!=='tip'){
+    if(isNative()){ if(!(refId&&_nativeRefs.has(refId))) nativeNow('INK.OS',text); }
+    else if(pushOn()){ const c=pushCfg(); if(!(refId&&c.sent[refId])) ntfyPublish('INK.OS',pushSafeText(n.kind,text)).catch(()=>sysNotify(text)); }
+    else sysNotify(text);
+  }
+  return n;
+}
+async function sysNotify(text){
+  if(!('Notification' in window)||Notification.permission!=='granted') return;
+  try{ const reg=navigator.serviceWorker&&await navigator.serviceWorker.getRegistration();
+    if(reg&&reg.showNotification){ await reg.showNotification('INK.OS',{body:text,icon:'icon-192.png',badge:'icon-192.png',tag:'ink-'+Date.now()}); return; } }catch(e){}
+  try{ new Notification('INK.OS',{body:text}); }catch(e){}
+}
+function requestNotifPermission(){
+  if('Notification' in window && Notification.permission==='default'){
+    Notification.requestPermission();
+  }
+}
+function computeAutoNotifications(){
+  const now=Date.now();
+  const existingRefs=new Set(S.notifications.map(n=>n.refId));
+  // post-session reminders (7/30/60 days) based on tattooWork/session events completed
+  S.events.filter(e=>e.type==='session' && e.status==='completed').forEach(ev=>{
+    const client=S.clients.find(c=>c.id===ev.clientId);
+    if(!client) return;
+    const d0=new Date(ev.date);
+    [[7,'week',`Прошла неделя после сеанса с ${client.name}. Напишите клиенту и узнайте, как проходит восстановление.`],
+     [30,'month',`Прошёл месяц после сеанса с ${client.name}. Узнайте, как выглядит татуировка, и предложите продолжение проекта.`],
+     [60,'2month',`Прошло два месяца после сеанса с ${client.name}. Предложите новую идею и попросите оставить отзыв.`]
+    ].forEach(([days,tag,text])=>{
+      const refId=ev.id+'-'+tag;
+      const due=new Date(d0.getTime()+days*86400000);
+      if(due.getTime()<=now && !existingRefs.has(refId)){
+        addNotification(text,'followup',refId);
+      }
+    });
+  });
+  // birthdays: warn 7 days ahead, and on the day itself, once per year
+  (S.clients||[]).forEach(c=>{
+    if(!c.birthDate) return;
+    const bd=new Date(c.birthDate); if(isNaN(bd.getTime())) return;
+    const year=new Date(now).getFullYear();
+    [0,7].forEach(daysAhead=>{
+      const target=new Date(year,bd.getMonth(),bd.getDate());
+      target.setDate(target.getDate()-daysAhead);
+      const refId=`bday-${c.id}-${year}-${daysAhead}`;
+      const diff=Math.abs(target.getTime()-now);
+      if(diff<86400000 && !existingRefs.has(refId)){
+        addNotification(daysAhead===0?`Сегодня день рождения у ${c.name}! 🎂`:`Через неделю день рождения у ${c.name}.`,'birthday',refId);
+      }
+    });
+  });
+  // homework overdue
+  S.homework.forEach(h=>{
+    if(h.deadline && h.status!=='Принято' && h.status!=='Отменено'){
+      if(new Date(h.deadline).getTime()<now && h.status!=='Просрочено'){
+        h.status='Просрочено'; idbPut('homework',h);
+        addNotification(`Домашнее задание просрочено: ${h.title||''} (${(S.students.find(s=>s.id===h.studentId)||{}).name||''})`,'homework','hwover-'+h.id);
+      }
+    }
+  });
+  // backup reminder: warn if there's meaningful data but no backup in the last 14 days
+  const hasData = (S.clients||[]).length>0 || (S.events||[]).length>0;
+  if(hasData){
+    const lastBackupTs = (S.backups||[]).reduce((max,b)=>{ const t=new Date(b.date).getTime(); return t>max?t:max; },0);
+    const daysSince = lastBackupTs? Math.floor((now-lastBackupTs)/86400000) : Infinity;
+    if(daysSince>=14){
+      const bucket = Number.isFinite(daysSince)? Math.floor(daysSince/7) : 'never';
+      const refId='backup-reminder-'+bucket;
+      if(!existingRefs.has(refId)){
+        addNotification(lastBackupTs? `Вы не делали резервную копию ${daysSince} дн. Рекомендуем сохранить копию в разделе «Данные».` : `Вы ещё ни разу не делали резервную копию данных. Рекомендуем сохранить копию в разделе «Данные».`,'backup',refId);
+      }
+    }
+  }
+  renderNotifCount();
+}
+function renderNotifCount(){
+  const unread=S.notifications.filter(n=>!n.read).length;
+  const b=$('#notifCount');
+  if(unread>0){ b.textContent=unread>99?'99+':unread; b.classList.remove('hidden'); } else { b.classList.add('hidden'); }
+}
+
+/* ====================== ICONS (inline geometric SVG, 1.6px stroke) ====================== */
+const ICONS={
+  home:'<path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/>',
+  consents:'<path d="M6 3.5h9l4 4v13h-13z"/><path d="M15 3.5v4h4"/><path d="M8 12.5l6.5 2.5" stroke-linecap="round"/>',
+  projects:'<rect x="3.5" y="7" width="12" height="14" rx="2"/><path d="M8 7V5a2 2 0 012-2h6a2 2 0 012 2v11a2 2 0 01-2 2h-1.5"/><path d="M7 12h6M7 15.5h6"/>',
+  calendar:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17"/><path d="M8 3v3M16 3v3"/><circle cx="12" cy="14.5" r="1.4" fill="currentColor" stroke="none"/>',
+  clients:'<circle cx="9" cy="8" r="3"/><path d="M4 20c0-3.3 2.5-5.5 5-5.5s5 2.2 5 5.5"/><circle cx="16.5" cy="9" r="2.3"/><path d="M15 14.5c2 .2 4 1.8 4 5"/>',
+  finance:'<path d="M4 16l4-5 3.5 3 5-6.5L20 10"/><path d="M4 20h16"/>',
+  burger:'<path d="M4 7h13"/><path d="M4 12h16"/><path d="M4 17h13"/>',
+  training:'<path d="M12 4 3 8l9 4 9-4-9-4Z"/><path d="M7 10.5V15c0 1.5 2.2 3 5 3s5-1.5 5-3v-4.5"/>',
+  inventory:'<path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z"/><path d="M4 7.5 12 12l8-4.5"/><path d="M12 12v9"/>',
+  guestspot:'<circle cx="12" cy="9" r="3"/><rect x="6" y="14" width="12" height="7" rx="2"/><path d="M9.5 17.5h5"/>',
+  cities:'<path d="M12 21s-6-5.2-6-10a6 6 0 1 1 12 0c0 4.8-6 10-6 10Z"/><circle cx="12" cy="11" r="2"/>',
+  photos:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7l1.5-2.5h5L16 7"/><circle cx="12" cy="13.5" r="3.4"/>',
+  reports:'<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  data:'<ellipse cx="12" cy="5.5" rx="7" ry="2.5"/><path d="M5 5.5v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6"/><path d="M5 11.5v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6"/>',
+  help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.5 2.5 0 1 1 3.7 2.2c-.9.5-1.2 1-1.2 2"/><circle cx="12" cy="16.7" r="0.9" fill="currentColor" stroke="none"/>',
+  settings:'<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2.3M12 19.2v2.3M21.5 12h-2.3M4.8 12H2.5M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2 5.6 5.6"/>',
+  edit:'<path d="M4 20l.9-3.6L16.4 5 19 7.6 7.6 19.1 4 20Z"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  dots:'<circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/>',
+  message:'<rect x="3.5" y="4.5" width="17" height="13" rx="3"/><path d="M9 21l3-3.5"/><path d="M8 10h.01M12 10h.01M16 10h.01" stroke-width="2.4"/>',
+  chevron:'<path d="M9 6l6 6-6 6"/>',
+  close:'<path d="M6 6l12 12M18 6L6 18"/>',
+  camera:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7l1.5-2.5h5L16 7"/><circle cx="12" cy="13.5" r="3.4"/>',
+  chart:'<path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/>',
+  minus:'<path d="M5 12h14"/>',
+  coin:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v9M9.5 9.5h3.2a1.8 1.8 0 010 3.6H9.8a1.8 1.8 0 000 3.6h3.7"/>',
+  clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.3 2"/>',
+  clientAdd:'<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.6-5.5 6-5.5s6 2.2 6 5.5"/><path d="M18 8v5M15.5 10.5h5"/>',
+  repeat:'<path d="M17 2l4 4-4 4"/><path d="M21 6H8a5 5 0 00-5 5"/><path d="M7 22l-4-4 4-4"/><path d="M3 18h13a5 5 0 005-5"/>',
+  phone:'<path d="M6.5 3.5 9 6l-1.3 2.6a12 12 0 0 0 7.7 7.7L18 15l2.5 2.5c.4.4.5 1 .2 1.5-1 1.6-2.9 2.5-4.7 2-5.7-1.5-10-5.8-11.5-11.5-.5-1.8.4-3.7 2-4.7.5-.3 1.1-.2 1.5.2Z"/>',
+  vk:'<path d="M4 4.5c.2 8 4.3 12.8 11 13h.9v-3c2.6.3 4.6-.6 5.4-2.2M4 4.5h3c.2 4 2 6.6 3 6.9V4.5h3v4.2c1-.2 2.7-2 3.3-4.2h3c-.5 2.6-2.3 4.5-3.6 5.3 1.3.6 3.3 2.3 4.1 4.7h-3.2c-.6-2-2.2-3.6-4.6-3.8v3.8h-.4C7.6 14.5 4.3 10 4 4.5Z"/>',
+  telegram:'<path d="M20.5 4 3 11l5 1.8M20.5 4 17 19.5l-6.8-5M20.5 4 8 13.3v5.4l2.2-2.7"/>',
+  instagram:'<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1" fill="currentColor" stroke="none"/>',
+  max:'<circle cx="11.2" cy="10.3" r="6.2" stroke-width="3"/><path d="M15 14.7l3.6 4" stroke-width="3" stroke-linecap="round"/>'
+};
+function icon(name,cls){ return `<svg class="ico ${cls||''}" viewBox="0 0 24 24">${ICONS[name]||''}</svg>`; }
+
+/* ====================== NAVIGATION (2-level: bottom tabs + "More" sheet) ====================== */
+const NAV=[
+  {id:'dashboard',label:'Главная',icon:'home'},
+  {id:'calendar',label:'Календарь',icon:'calendar'},
+  {id:'clients',label:'Клиенты',icon:'clients'},
+  {id:'projects',label:'Проекты',icon:'projects'},
+  {id:'finance',label:'Финансы',icon:'finance'},
+  {id:'training',label:'Менторство',icon:'training'},
+  {id:'inventory',label:'Склад',icon:'inventory'},
+  {id:'guestspot',label:'Guest Spot',icon:'guestspot'},
+  {id:'cities',label:'Города',icon:'cities'},
+  {id:'photos',label:'Фото',icon:'photos'},
+  {id:'consents',label:'Анкеты',icon:'consents'},
+  {id:'calculator',label:'Калькулятор цены',icon:'finance'},
+  {id:'analytics',label:'Аналитика и налоги',icon:'chart'},
+  {id:'reports',label:'Отчёты',icon:'reports'},
+  {id:'data',label:'Данные',icon:'data'},
+  {id:'help',label:'Справка',icon:'help'},
+  {id:'settings',label:'Настройки',icon:'settings'}
+];
+const PRIMARY_MOBILE=['dashboard','calendar','clients','finance'];
+function navBadge(id){
+  if(id==='training') return S.homework.some(h=>h.status==='На проверке'||h.status==='Просрочено');
+  if(id==='inventory') return S.inventory.some(i=>i.qty<=i.threshold);
+  if(id==='guestspot') return S.guestSpots.some(g=>!g.closed);
+  return false;
+}
+function buildNav(){
+  const sb=$('#sidebar');
+  sb.innerHTML=NAV.map(n=>`<div class="nav-item" data-route="${n.id}">${icon(n.icon)}<span>${n.label}</span></div>`).join('');
+  sb.querySelectorAll('.nav-item').forEach(el=>el.onclick=()=>go(el.dataset.route));
+  const bn=$('#bottomnav');
+  const items=NAV.filter(n=>PRIMARY_MOBILE.includes(n.id));
+  bn.innerHTML=items.map(n=>`<div class="navbtn" data-route="${n.id}">${icon(n.icon)}${navBadge(n.id)?'<span class="nbadge"></span>':''}<span class="nlabel">${n.label}</span></div>`).join('')+
+    `<div class="navbtn" id="moreNavBtn">${icon('burger')}<span class="nlabel">Ещё</span></div>`;
+  bn.querySelectorAll('.navbtn[data-route]').forEach(el=>el.onclick=()=>go(el.dataset.route));
+  $('#moreNavBtn').onclick=openMoreSheet;
+}
+function openMoreSheet(){
+  const rest=NAV.filter(n=>!PRIMARY_MOBILE.includes(n.id)&&n.id!=='dashboard');
+  $('#moreSheetInner').innerHTML=`<div class="sheet-handle"></div><div class="row" style="margin-bottom:6px"><h3 style="margin:0">Ещё</h3><button class="btn btn-icon btn-sm" onclick="closeMoreSheet()">${icon('close')}</button></div>`+
+    rest.map(n=>`<div class="sheet-item" data-route="${n.id}">${icon(n.icon,'')}<span>${n.label}</span>${navBadge(n.id)?'<span class="nbadge"></span>':''}</div>`).join('');
+  $('#moreSheetInner').querySelectorAll('.sheet-item').forEach(el=>el.onclick=()=>{ closeMoreSheet(); go(el.dataset.route); });
+  $('#moreSheet').style.display='flex';
+}
+function closeMoreSheet(){ $('#moreSheet').style.display='none'; }
+$('#moreSheet').addEventListener('click',e=>{ if(e.target.id==='moreSheet') closeMoreSheet(); });
+
+/* ====================== GENERIC SHEET (now always centered, not bottom-anchored) ====================== */
+function openSheet(title,html,opts){
+  opts=opts||{};
+  const centered=opts.centered!==false;
+  $('#genericSheetBody').innerHTML=`${centered?'':'<div class="sheet-handle"></div>'}<div class="gsheet-header"><button class="sh-back" onclick="closeSheet()" aria-label="Назад">${icon('chevron')}</button><h3>${esc(title)}</h3></div><div>${html}</div>`;
+  $('#genericSheetOverlay').classList.toggle('centered',centered);
+  $('#genericSheetOverlay').classList.add('open');
+}
+function closeSheet(){ $('#genericSheetOverlay').classList.remove('open'); }
+$('#genericSheetOverlay').addEventListener('click',e=>{ if(e.target.id==='genericSheetOverlay') closeSheet(); });
+
+const RENDERERS={};
+function go(route){
+  if($('#modalOverlay').classList.contains('client-open')) closeModal();
+  currentRoute=route;
+  $$('#sidebar .nav-item').forEach(el=>el.classList.toggle('active',el.dataset.route===route));
+  $$('#bottomnav .navbtn').forEach(el=>el.classList.toggle('active',el.dataset.route===route));
+  {const nv=NAV.find(n=>n.id===route)||{}; $('#topbarSub').innerHTML=(nv.icon?icon(nv.icon):'')+(nv.label||''); $('#topbar').dataset.route=route;}
+  $('#tipsBtn').classList.toggle('hidden', route!=='dashboard');
+  const fn=RENDERERS[route];
+  $('#content').innerHTML = fn ? '' : '<p class="dim">Раздел в разработке.</p>';
+  if(fn) fn();
+  window.scrollTo(0,0);
+  $('#content').scrollTop=0;
+}
+function renderTipsBadge(){
+  const n=(window._dash&&window._dash.tips)?window._dash.tips.length:0;
+  const b=$('#tipsCount');
+  if(n>0){ b.textContent=n; b.classList.remove('hidden'); } else { b.classList.add('hidden'); }
+}
+$('#tipsBtn').onclick=()=>openDashSheet('tips');
+
+/* ====================== SPLASH SCREEN (INK.OS animation) ====================== */
+function runSplash(){
+  const st=S.settings||{};
+  if(st.splash==='off'){ finishSplash(); return; }
+  const sp=$('#splash'), short=st.splash==='short';
+  sp.classList.toggle('short',short);
+  requestAnimationFrame(()=>sp.classList.add('play'));
+  setTimeout(finishSplash, short?2900:5600);
+}
+function finishSplash(){
+  if(finishSplash._done) return;
+  finishSplash._done=true;
+  const sp=$('#splash');
+  sp.style.opacity='0';
+  setTimeout(()=>{ sp.style.display='none'; afterSplash(); },600);
+}
+$('#skipSplash').onclick=finishSplash;
+
+/* ====================== PIN LOCK ====================== */
+let pinBuffer='';
+function afterSplash(){
+  if(S.settings.pin){
+    showPinScreen('unlock');
+  } else {
+    bootApp();
+  }
+}
+function showPinScreen(mode){
+  $('#pinScreen').classList.remove('hidden');
+  pinBuffer='';
+  $('#pinMsg').textContent = mode==='set' ? 'Придумайте PIN (4 цифры)' : (mode==='confirm'?'Повторите PIN':'Введите PIN');
+  renderPinDots();
+  const digits=[1,2,3,4,5,6,7,8,9,'',0,'⌫'];
+  $('#pinPad').innerHTML=digits.map(d=>`<button data-d="${d}" ${d===''?'style="visibility:hidden"':''}>${d}</button>`).join('');
+  $('#pinPad').querySelectorAll('button[data-d]').forEach(b=>{
+    b.onclick=()=>{
+      const d=b.dataset.d;
+      if(d==='⌫'){ pinBuffer=pinBuffer.slice(0,-1); renderPinDots(); return; }
+      if(pinBuffer.length<4){ pinBuffer+=d; renderPinDots(); }
+      if(pinBuffer.length===4) handlePinComplete(mode);
+    };
+  });
+}
+let pinFirstEntry=null;
+function handlePinComplete(mode){
+  if(mode==='unlock'){
+    if(pinBuffer===S.settings.pin){ hidePinScreen(); bootApp(); }
+    else { $('#pinMsg').textContent='Неверный PIN'; pinBuffer=''; renderPinDots(); }
+  } else if(mode==='set'){
+    pinFirstEntry=pinBuffer; showPinScreen('confirm');
+  } else if(mode==='confirm'){
+    if(pinBuffer===pinFirstEntry){ S.settings.pin=pinBuffer; saveSettings(); hidePinScreen(); toast('PIN установлен'); if(!appBooted) bootApp(); else go('settings'); }
+    else { toast('PIN не совпадает'); showPinScreen('set'); }
+  }
+}
+function renderPinDots(){
+  $('#pinDots').innerHTML=[0,1,2,3].map(i=>`<span class="${i<pinBuffer.length?'filled':''}"></span>`).join('');
+}
+function hidePinScreen(){ $('#pinScreen').classList.add('hidden'); }
+$('#lockBtn').onclick=()=>{ if(S.settings.pin){ showPinScreen('unlock'); } else { toast('PIN не установлен. Задайте его в Настройках.'); } };
+
+/* ====================== BOOT ====================== */
+let appBooted=false;
+async function bootApp(){
+  if(appBooted) return;
+  appBooted=true;
+  $('#app').classList.remove('hidden');
+  buildNav();
+  requestNotifPermission();
+  computeAutoNotifications();
+  renderNotifCount();
+  go('dashboard');
+  setInterval(()=>{ computeAutoNotifications(); }, 60000);
+  setupInactivityLock();
+}
+/* ====================== AUTO-LOCK AFTER INACTIVITY ====================== */
+let inactivityTimer=null;
+function resetInactivityTimer(){
+  if(inactivityTimer){ clearTimeout(inactivityTimer); inactivityTimer=null; }
+  const mins=Number(S.settings.autoLockMinutes||0);
+  if(!S.settings.pin || !mins) return;
+  inactivityTimer=setTimeout(()=>{
+    if(!$('#pinScreen').classList.contains('hidden')) return;
+    showPinScreen('unlock');
+  }, mins*60000);
+}
+function setupInactivityLock(){
+  ['click','touchstart','keydown','mousemove'].forEach(evt=>document.addEventListener(evt,resetInactivityTimer,{passive:true}));
+  resetInactivityTimer();
+}
+/* ====================== FINANCIAL DATA MASKING ====================== */
+function finVal(html){
+  return S.settings.hideFinance ? `<span title="Финансовые данные скрыты — включите показ в Настройках → Безопасность" style="letter-spacing:2px">••••••</span>` : html;
+}
+async function init(){
+  try{ db=await idbOpen(); }catch(e){ db=null; toast('IndexedDB недоступен — используется резервное хранилище localStorage.'); }
+  await loadAllData();
+  if(S.clients.length===0 && S.settings._seeded!==true){
+    // first run: offer demo data via prompt on dashboard; do not auto-seed silently more than once
+  }
+  runSplash();
+}
+init();
+
+/* ====================== BACKGROUND PATTERN (inline SVG skulls/graffiti, low opacity) ====================== */
+(function setBgPattern(){
+  const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><g fill='none' stroke='%23c62b28' stroke-width='2'>
+  <circle cx='40' cy='40' r='16'/><path d='M32 44 q8 10 16 0'/><circle cx='34' cy='36' r='3'/><circle cx='46' cy='36' r='3'/>
+  <path d='M120 130 l14 14 M134 130 l-14 14'/><path d='M100 150 q20 -18 40 0'/>
+  <path d='M10 120 l160 0' stroke-dasharray='4 6' opacity='.5'/>
+  </g></svg>`;
+  const url='data:image/svg+xml;utf8,'+encodeURIComponent(svg);
+  $('#bgPattern').style.backgroundImage=`url("${url}")`;
+})();
+
+/* ====================== DASHBOARD ====================== */
+RENDERERS.dashboard=function(){
+  const today=todayISO();
+  const todaysEvents=S.events.filter(e=>e.date===today).sort((a,b)=>(a.start||'').localeCompare(b.start||''));
+  const now=new Date();
+  const upcoming=S.events.filter(e=>new Date(e.date+'T'+(e.start||'00:00'))>now).sort((a,b)=>new Date(a.date+'T'+(a.start||'00:00'))-new Date(b.date+'T'+(b.start||'00:00')))[0];
+  const monthStr=today.slice(0,7);
+  const monthFinance=S.finance.filter(f=>f.date && f.date.slice(0,7)===monthStr);
+  const revenueMonth=monthFinance.filter(f=>f.type==='income').reduce((s,f)=>s+Number(f.amount||0),0);
+  const expenseMonth=monthFinance.filter(f=>f.type==='expense').reduce((s,f)=>s+Number(f.amount||0),0);
+  const revenueToday=S.finance.filter(f=>f.type==='income'&&f.date===today).reduce((s,f)=>s+Number(f.amount||0),0);
+  const expensesFilled = monthFinance.some(f=>f.type==='expense'); // heuristic
+  const profit=revenueMonth-expenseMonth;
+  const newClients=S.clients.filter(c=>c.firstVisit && c.firstVisit.slice(0,7)===monthStr).length;
+  const repeatClients=S.clients.filter(c=>(c.visits||0)>1).length;
+  const needContact=S.clients.filter(c=>c.status==='Давно не был'||c.status==='Ожидает ответа').slice(0,6);
+  const longAbsent=S.clients.filter(c=>c.lastVisit && daysBetween(c.lastVisit,today)>180).slice(0,6);
+  const birthdays=upcomingBirthdays(14);
+  const avgCheck = S.clients.length? (S.clients.reduce((s,c)=>s+Number(c.totalSum||0),0)/Math.max(1,S.clients.reduce((s,c)=>s+Number(c.visits||0),0))) : 0;
+  const studentsCount=S.students.length;
+  const trainingIncome=S.finance.filter(f=>f.category==='training').reduce((s,f)=>s+Number(f.amount||0),0);
+  const hwToReview=S.homework.filter(h=>h.status==='На проверке').length;
+  const hwOverdue=S.homework.filter(h=>h.status==='Просрочено').length;
+  const lowStock=S.inventory.filter(i=>i.category!=='equipment'&&i.qty<=i.threshold);
+  const cartridgeUsageAgg={};
+  S.cartridgeUsage.forEach(u=>{ const k=u.config; cartridgeUsageAgg[k]=(cartridgeUsageAgg[k]||0)+Number(u.qty||0); });
+  const topCartridges=Object.entries(cartridgeUsageAgg).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  const tasksOpen=S.tasks.filter(t=>!t.done);
+  const unreadNotif=S.notifications.filter(n=>!n.read);
+
+  // style popularity/income
+  const styleStats={};
+  S.tattooWork.forEach(w=>{ if(!w.style) return; styleStats[w.style]=styleStats[w.style]||{count:0,income:0}; styleStats[w.style].count++; const pay=S.payments.find(p=>p.eventId===w.eventId); styleStats[w.style].income+=pay?Number(pay.amount||0):0; });
+  const topStyleCount=Object.entries(styleStats).sort((a,b)=>b[1].count-a[1].count)[0];
+  const topStyleIncome=Object.entries(styleStats).sort((a,b)=>b[1].income-a[1].income)[0];
+
+  const tips=[];
+  if(topStyleCount) tips.push(`Популярный стиль: ${topStyleCount[0]} (${topStyleCount[1].count} работ).`);
+  if(topStyleIncome) tips.push(`Больше всего дохода приносит стиль: ${topStyleIncome[0]} (${fmtMoney(topStyleIncome[1].income)}).`);
+  if(lowStock.length) tips.push(`Заканчиваются материалы: ${lowStock.slice(0,4).map(i=>i.name).join(', ')}.`);
+  if(topCartridges[0]) tips.push(`Чаще всего используется картридж: ${topCartridges[0][0]} — закупайте его в приоритете.`);
+  if(needContact.length) tips.push(`Клиентов ждущих ответа: ${needContact.length} — стоит написать.`);
+  if(hwToReview) tips.push(`На проверке ${hwToReview} домашних заданий учеников.`);
+  if(profit<0) tips.push(`Расходы за месяц превышают доход — проверьте закупки.`);
+  if(!tips.length) tips.push('Данных пока недостаточно для рекомендаций — заполните события, платежи и склад.');
+
+  window._dash={todaysEvents,tips,needContact,longAbsent,today,birthdays};
+  const ownerName=S.settings.ownerName||'Мастер';
+  const clientsToday=new Set(todaysEvents.map(e=>e.clientId).filter(Boolean)).size;
+  const pl=(n,a,b,c)=>n+' '+((n%10===1&&n%100!==11)?a:([2,3,4].includes(n%10)&&![12,13,14].includes(n%100))?b:c);
+  const nowD=new Date(), hr=nowD.getHours();
+  const hello=hr<5?'Доброй ночи':hr<12?'Доброе утро':hr<18?'Добрый день':'Добрый вечер';
+  const dateLine=nowD.toLocaleDateString('ru-RU',{weekday:'long'})+' · '+nowD.toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
+  const workH=todaysEvents.filter(e=>e.status!=='cancelled').reduce((s,e)=>s+eventHours(e),0);
+  const wh=Math.floor(workH), wm=Math.round((workH-wh)*60);
+  const unconfirmed=S.events.filter(e=>e.type==='session'&&e.date>=today&&!['cancelled','completed','noshow'].includes(e.status)&&!(e.checklistPre&&e.checklistPre[0])).length;
+  const returnN=new Set([...needContact,...longAbsent].map(c=>c.id)).size;
+  const tmr=(()=>{const d=new Date();d.setDate(d.getDate()+1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+  const tmrN=S.events.filter(e=>e.clientId&&e.date===tmr&&!['cancelled','completed','noshow'].includes(e.status)).length;
+  const todo=[
+    [tmrN,'Завтра '+pl(tmrN,'клиент','клиента','клиентов')+' — напомнить',"go('calendar')"],
+    [unconfirmed,pl(unconfirmed,'запись','записи','записей')+' без подтверждения',"go('calendar')"],
+    [returnN,pl(returnN,'клиент','клиента','клиентов')+' пора вернуть',"openDashSheet('contact')"],
+    [lowStock.length,pl(lowStock.length,'материал заканчивается','материала заканчиваются','материалов заканчиваются'),"go('inventory')"],
+    [birthdays.length,pl(birthdays.length,'день рождения','дня рождения','дней рождения'),"openDashSheet('birthdays')"],
+    [tasksOpen.length,pl(tasksOpen.length,'открытая задача','открытые задачи','открытых задач'),"openDashSheet('more')"]
+  ].filter(t=>t[0]>0);
+  const upH=upcoming?eventHours(upcoming):0;
+  const upCard=upcoming?`<div class="up-card" onclick="openDaySummary('${upcoming.date}')"><span class="up-ic" style="--c:${EVENT_TYPES[upcoming.type]?.color||'#8E44AD'}">${icon('clock')}</span><div class="up-time">${upcoming.start||''}<small>${upcoming.date===today?'сегодня':fmtDate(upcoming.date)}</small></div><div class="up-body"><b>${esc(clientOrLabel(upcoming))}</b><div class="dim small">${esc(upcoming.zone||EVENT_TYPES[upcoming.type]?.label||'')}${upH?' · '+(+upH.toFixed(1))+' ч':''}</div></div>${icon('chevron')}</div>`:'<div class="card dim small">Ближайших событий нет</div>';
+  $('#content').innerHTML=`
+  <div class="dash-head"><h2>${hello}, ${esc(S.settings.ownerName||'Роман')}</h2><div class="dh-date">${dateLine}</div></div>
+  <div class="today-card2" onclick="openDashSheet('today')">
+    <div class="sec-label" style="margin:0">Сегодня</div>
+    <div class="tc-row"><span>${icon('calendar')}<b>${pl(todaysEvents.length,'запись','записи','записей')}</b></span><span>${icon('clients')}<b>${pl(clientsToday,'клиент','клиента','клиентов')}</b></span></div>
+    <div class="tc-row">${icon('clock')}<b>${wh} ч ${wm} мин работы</b></div>
+  </div>
+  ${goalCardHtml()}
+  <div class="sec-label">Быстрые действия</div>
+  <div class="qa-grid">
+    <button class="qa-btn" onclick="openEventForm(null,{type:'session'})">${icon('plus','ic')}Запись</button>
+    <button class="qa-btn" onclick="openClientForm()">${icon('plus','ic')}Клиент</button>
+    <button class="qa-btn" onclick="openFinanceForm()">${icon('plus','ic')}Расход</button>
+    <button class="qa-btn" onclick="go('photos')">${icon('camera','ic')}Фото</button>
+  </div>
+  ${S.clients.length===0 && S.events.length===0 ? `<div class="card card-red" style="margin-bottom:14px"><div class="row"><div><b>Похоже, это первый запуск.</b><div class="dim small">Загрузите демонстрационные данные, чтобы посмотреть, как работает приложение.</div></div><button class="btn btn-primary" onclick="seedDemoData()">Загрузить демо-данные</button></div></div>` : ''}
+  <div class="sec-label">Нужно сделать</div>
+  <div class="todo-list2">${todo.length?todo.map(t=>`<div class="todo-row" onclick="${t[2]}"><span class="dot"></span><span class="t">${t[1]}</span>${icon('chevron')}</div>`).join(''):'<div class="card dim small">Всё сделано</div>'}</div>
+  <div class="sec-label">Ближайшее событие</div>
+  ${upCard}
+  <button class="action-card" style="margin-top:14px" onclick="openDashSheet('more')"><span>Ещё статистика</span><span>${icon('chevron')}</span></button>`;
+  window._dashExtra={avgCheck,trainingIncome,hwToReview,tasksOpen};
+  renderTipsBadge();
+};
+function openDashSheet(kind){
+  const d=window._dash, ex=window._dashExtra;
+  if(kind==='today'){
+    openSheet('Записи сегодня', d.todaysEvents.length? d.todaysEvents.map(e=>`<div class="row" style="padding:8px 0;border-bottom:1px dashed var(--line)"><span>${e.start||''} · ${EVENT_TYPES[e.type]?.label||e.type} ${e.clientId?('· '+ (clientName(e.clientId))):''}</span><span class="evt-dot" style="background:${EVENT_TYPES[e.type]?.color}"></span></div>`).join('')+`<button class="btn btn-sm" style="margin-top:10px" onclick="closeSheet();go('calendar')">Открыть календарь</button>` : '<p class="dim">Сегодня записей нет.</p><button class="btn btn-sm" onclick="closeSheet();go(\'calendar\')">Открыть календарь</button>');
+  } else if(kind==='tips'){
+    openSheet('Советы владельцу', d.tips.map(t=>`<div class="small" style="padding:8px 0;border-bottom:1px dashed var(--line)">💡 ${esc(t)}</div>`).join(''));
+  } else if(kind==='contact'){
+    openSheet('Написать клиентам', d.needContact.length? `
+      ${d.needContact.length>1?`<button class="btn btn-sm btn-primary" style="margin-bottom:8px" onclick="openBulkMessageSheet(window._dash.needContact)">✉️ Написать всем сразу</button>`:''}
+      ${d.needContact.map(c=>`<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line)"><span>${esc(c.name)} <span class="badge badge-wait">${esc(c.status)}</span></span><button class="btn btn-sm" onclick="closeSheet();openClient('${c.id}')">Открыть</button></div>`).join('')}
+    ` : '<p class="dim">Нет клиентов, требующих контакта.</p>');
+  } else if(kind==='absent'){
+    openSheet('Давно не посещали студию', d.longAbsent.length? `
+      ${d.longAbsent.length>1?`<button class="btn btn-sm btn-primary" style="margin-bottom:8px" onclick="openBulkMessageSheet(window._dash.longAbsent)">✉️ Написать всем сразу</button>`:''}
+      ${d.longAbsent.map(c=>`<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line)"><span>${esc(c.name)} · ${daysBetween(c.lastVisit,d.today)} дн.</span><button class="btn btn-sm" onclick="closeSheet();openClient('${c.id}')">Открыть</button></div>`).join('')}
+    ` : '<p class="dim">Все клиенты активны.</p>');
+  } else if(kind==='birthdays'){
+    openSheet('Дни рождения', d.birthdays.length? d.birthdays.map(b=>`<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line)"><span>🎂 ${esc(b.client.name)} · ${b.diffDays===0?'сегодня!':b.diffDays===1?'завтра':'через '+b.diffDays+' дн.'}</span><button class="btn btn-sm" onclick="closeSheet();openClient('${b.client.id}')">Открыть</button></div>`).join('') : '<p class="dim">Ближайших дней рождения нет.</p>');
+  } else if(kind==='more'){
+    openSheet('Дополнительная статистика', `<div class="grid grid-2">
+      <div class="stat"><div class="num">${fmtMoney(ex.avgCheck)}</div><div class="lbl">Средний чек</div></div>
+      <div class="stat"><div class="num">${fmtMoney(ex.trainingIncome)}</div><div class="lbl">Доход от обучения</div></div>
+      <div class="stat"><div class="num">${ex.hwToReview}</div><div class="lbl">Заданий на проверку</div></div>
+      <div class="stat"><div class="num">${ex.tasksOpen.length}</div><div class="lbl">Открытых задач</div></div>
+    </div>`);
+  }
+}
+/* ====================== МАССОВАЯ РАССЫЛКА (WhatsApp, по одному клику на клиента) ====================== */
+function openBulkMessageSheet(clients){
+  clients=(clients||[]).filter(Boolean);
+  if(!clients.length){ toast('Нет клиентов для рассылки'); return; }
+  const defaultText='Здравствуйте! Давно не виделись — хотели узнать, как ваши дела, и предложить записаться на новый сеанс 🙂';
+  openSheet('Массовая рассылка · '+clients.length+' чел.', `
+    <p class="small dim">Один текст для всех. Нажмите WhatsApp у каждого клиента — сообщение откроется уже с текстом, останется нажать «Отправить».</p>
+    <textarea id="bulkMsgText" rows="3">${esc(defaultText)}</textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="btn btn-sm" id="bulkCopyBtn">Скопировать текст</button>
+      <span class="small dim" id="bulkNoPhoneNote"></span>
+    </div>
+    <div id="bulkMsgList" style="margin-top:10px"></div>
+  `);
+  function renderList(){
+    const text=$('#bulkMsgText').value;
+    let noPhone=0;
+    $('#bulkMsgList').innerHTML = clients.map(c=>{
+      const digits=(c.whatsapp||c.phone||'').replace(/[^0-9]/g,'');
+      const link = digits? `https://wa.me/${digits}?text=${encodeURIComponent(text)}` : '';
+      if(!digits) noPhone++;
+      return `<div class="row small" style="padding:7px 0;border-bottom:1px dashed var(--line)">
+        <span>${esc(c.name)}</span>
+        ${link?`<a class="btn btn-sm btn-primary" href="${link}" target="_blank" rel="noopener">WhatsApp</a>`:'<span class="dim">Нет номера</span>'}
       </div>`;
-    }
-    html+='</div>';
-    $('#calGrid').innerHTML=html;
-  } else if(calState.view==='day'){
-    const iso=d.toISOString().slice(0,10);
-    $('#calLabel').textContent=fmtDate(iso);
-    const dayEvs=evs.filter(e=>e.date===iso).sort((a,b)=>(a.start||'').localeCompare(b.start||''));
-    const gsToday=guestSpotsOnDate(iso);
-    const gsHtml=gsToday.length? `<div class="card" style="margin-bottom:8px;border-color:var(--pur);cursor:pointer" onclick="openGuestSpotForm(${jattr(gsToday[0])})"><b>✈️ Guest Spot: ${gsToday.map(g=>esc(g.city)+(g.place?(' — '+esc(g.place)):'')).join(', ')}</b><div class="small dim">${gsToday.map(g=>fmtDate(g.dateStart)+' – '+fmtDate(g.dateEnd)).join('; ')}</div></div>` : '';
-    $('#calGrid').innerHTML = gsHtml + (dayEvs.length? dayEvs.map(e=>renderEventCard(e)).join('') : '<p class="dim">На этот день событий нет.</p>');
-  } else if(calState.view==='list'){
-    $('#calLabel').textContent='Список событий';
-    const upcoming=evs.slice().sort((a,b)=>new Date(a.date+'T'+(a.start||'00:00'))-new Date(b.date+'T'+(b.start||'00:00')));
-    const activeTrips=(S.guestSpots||[]).filter(g=>!g.closed && g.dateEnd>=todayISO()).sort((a,b)=>new Date(a.dateStart)-new Date(b.dateStart));
-    const gsHtml=activeTrips.length? `<div class="card" style="margin-bottom:10px;border-color:var(--pur)"><b>✈️ Ближайшие / текущие поездки</b>${activeTrips.map(g=>`<div class="small dim" style="margin-top:4px;cursor:pointer" onclick="openGuestSpotForm(${jattr(g)})">${esc(g.city)} · ${fmtDate(g.dateStart)}–${fmtDate(g.dateEnd)}</div>`).join('')}</div>` : '';
-    $('#calGrid').innerHTML = gsHtml + (upcoming.length? upcoming.map(e=>renderEventCard(e)).join('') : '<p class="dim">Событий нет.</p>');
+    }).join('');
+    $('#bulkNoPhoneNote').textContent = noPhone? `Без номера: ${noPhone}` : '';
   }
+  $('#bulkMsgText').oninput=renderList;
+  $('#bulkCopyBtn').onclick=()=>{ navigator.clipboard?.writeText($('#bulkMsgText').value).then(()=>toast('Текст скопирован')).catch(()=>toast('Не удалось скопировать')); };
+  renderList();
 }
-function calSelect(iso){ calState.sel=iso; calState.date=new Date(iso+'T00:00'); renderCalGrid(); }
-function calEventRow(e){
-  const c=EVENT_TYPES[e.type]?.color||'#666', h=eventHours(e), done=e.status==='completed';
-  const off=e.status==='cancelled'?' · отменено':e.status==='noshow'?' · неявка':'';
-  return `<div class="ev-row" onclick="openEventView('${e.id}')"><div class="ev-t"><i style="background:${c}"></i>${e.start||''}</div><span class="ev-bar" style="background:${c}"></span><div class="ev-b"><b>${esc(clientOrLabel(e))}</b><div class="dim small">${esc(e.zone||EVENT_TYPES[e.type]?.label||'')}${h?' · '+(+h.toFixed(1))+' ч':''}${off}</div></div><span class="ev-end ${done?'ok':''}">${done?icon('check'):icon('chevron')}</span></div>`;
-}
-
-
-/* ===== уход, референсы/эскизы ===== */
-const CARE_DEFAULT='Привет, {name}! Рекомендации по уходу за новой татуировкой:\n\n1. Плёнку/повязку снимите через время, которое я назвал(а) — обычно 2–4 часа или на следующий день.\n2. Тёплой водой с мягким мылом без отдушек смойте лимфу и остатки краски, промокните чистой салфеткой.\n3. Дайте коже подсохнуть и нанесите тонкий слой рекомендованного крема 2–3 раза в день.\n4. Не чешите и не сдирайте корочки, не носите тесную одежду на этой зоне.\n5. 2–3 недели: без бани, сауны, бассейна, моря и солнца/солярия.\n6. При сильном покраснении, отёке или температуре — сразу пишите мне.\n\nЧерез 2–3 недели пришлите, пожалуйста, фото заживления 🙏';
-function copyText(t){
-  const fb=()=>{ const a=document.createElement('textarea'); a.value=t; a.style.cssText='position:fixed;opacity:0'; document.body.appendChild(a); a.select(); try{document.execCommand('copy');toast('Скопировано')}catch(e){toast('Не удалось скопировать — выделите текст вручную')} a.remove(); };
-  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(()=>toast('Скопировано'),fb); else fb();
-}
-function openCareSheet(eventId){
-  const e=S.events.find(x=>x.id===eventId); if(!e) return;
-  const c=S.clients.find(x=>x.id===e.clientId);
-  const tpl=(S.settings.careText||CARE_DEFAULT).replace(/\{name\}/g,(c&&c.name||'').split(' ')[0]||'');
-  openSheet('Уход за татуировкой',`<textarea class="care-ta" id="careText">${esc(tpl)}</textarea>
-  <p class="small dim">Текст можно править — он сохранится как шаблон на будущее (имя подставится само).</p>
-  <div class="btn-row"><button class="btn btn-primary btn-block" id="careCopy">${icon('message')} Скопировать для клиента</button>
-  ${navigator.share?'<button class="btn btn-block" id="careShare">Отправить через…</button>':''}</div>`);
-  const mark=async()=>{
-    const raw=$('#careText').value; const nm=((c&&c.name)||'').split(' ')[0];
-    S.settings.careText=nm?raw.split(nm).join('{name}'):raw; await saveSettings();
-    e.checklistPost=e.checklistPost||{}; e.checklistPost[6]=true;
-    e.careSent=todayISO(); if(!e.healCheck){ const d=new Date(); d.setDate(d.getDate()+21); e.healCheck=d.toISOString().slice(0,10); }
-    await idbPut('events',e);
-  };
-  $('#careCopy').onclick=async()=>{ copyText($('#careText').value); await mark(); };
-  if($('#careShare')) $('#careShare').onclick=async()=>{ try{ await navigator.share({text:$('#careText').value}); await mark(); }catch(_){} };
-}
+function clientName(id){ const c=S.clients.find(x=>x.id===id); return c?c.name:'—'; }
+function upcomingBirthdays(daysAhead){
+  daysAhead=daysAhead==null?14:daysAhead;
+  const now=new Date(); now.setHours(0,0,0,0);
+  const list=[];
+  (S.clients||[]).forEach(c=>{
+    if(!c.birthDate) return;
+    const bd=new Date(c.birthDate); if(isNaN(bd.getTime())) return;
+    const next=new Date(now.getFullYear(),bd.getMonth(),bd.getDate());
+    if(next<now) next.setFullYear(now.getFullYear()+1);
+    
