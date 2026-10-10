@@ -921,6 +921,41 @@ const fmtDateTime=d=>{ const dt=(d instanceof Date)?d:new Date(d); return dt.toL
 const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 const daysBetween=(a,b)=>Math.floor((new Date(b)-new Date(a))/86400000);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* Telegram binding buttons: delegated handler survives dynamic modal rendering. */
+document.addEventListener('click',function(e){
+  const btn=e.target.closest('#generateTelegramLink, #generateStudentTelegramLink');
+  if(!btn) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const student=btn.id==='generateStudentTelegramLink';
+  const field=document.getElementById(student?'studentTelegramLinkTokenField':'telegramLinkTokenField');
+  const preview=document.getElementById(student?'studentTelegramLinkPreview':'telegramLinkPreview');
+  const copy=document.getElementById(student?'copyStudentTelegramLink':'copyTelegramLink');
+  if(!field||!preview){
+    alert('Не найдено поле ссылки. Закрой карточку и открой её снова.');
+    return;
+  }
+  try{
+    let token='';
+    if(window.crypto&&typeof window.crypto.getRandomValues==='function'){
+      const bytes=new Uint8Array(24);
+      window.crypto.getRandomValues(bytes);
+      token=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+    }else{
+      for(let i=0;i<48;i++) token+=Math.floor(Math.random()*16).toString(16);
+    }
+    field.value=token;
+    preview.value='https://t.me/Ramzestattoo_bot?start=link_'+token;
+    if(copy) copy.disabled=false;
+    preview.removeAttribute('placeholder');
+    preview.style.borderColor='var(--accent, #e53935)';
+    toast('Ссылка создана. Теперь нажми «Сохранить» в карточке.');
+  }catch(err){
+    console.error('Telegram link generation failed',err);
+    alert('Не удалось создать ссылку: '+(err&&err.message?err.message:'ошибка браузера'));
+  }
+},true);
 function toast(msg,type){
   const w=$('#toastWrap');
   const el=document.createElement('div');
@@ -4686,7 +4721,7 @@ function generateAppIcon(){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
     const swUrl=new URL('sw.js',document.baseURI);
-    swUrl.searchParams.set('build','premium-20261010-v10-telegram-link-fix');
+    swUrl.searchParams.set('build','premium-20261010-v11-telegram-link-delegated');
     navigator.serviceWorker.register(swUrl,{updateViaCache:'none'}).then(reg=>reg.update()).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
