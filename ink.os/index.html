@@ -1968,23 +1968,10 @@ function openClientForm(existing){
     obj.reminderChannel=String(obj.reminderChannel||'telegram').toLowerCase()==='vk'?'vk':'telegram';
     obj.telegramChatId=String(obj.telegramChatId||'').trim();
     obj.vkPeerId=String(obj.vkPeerId||'').trim();
-    obj.quickNotes=$('#quickNotesWrap .chip.active').map(ch=>ch.dataset.n);
+    obj.quickNotes=$$('#quickNotesWrap .chip.active').map(ch=>ch.dataset.n);
     if(!obj.id) obj.id=uid();
     await idbPut('clients',obj);
-    let telegramLinkRegistered=true;
     const telegramToken=String(obj.telegramLinkToken||'').trim();
-    if(telegramToken){
-      try{
-        const response=await fetch('https://jgzzdsittnzomedvsspj.supabase.co/functions/v1/inkos-telegram-link',{
-          method:'POST',headers:{'Content-Type':'application/json','apikey':'sb_publishable_z40zmd4oAy9jUr3Q4BgDYQ_-IpiIlJe'},
-          body:JSON.stringify({token:telegramToken,clientId:String(obj.id),kind:'client',name:obj.name,phone:obj.phone||''}),
-          signal:AbortSignal.timeout(10000)
-        });
-        const result=await response.json().catch(()=>({}));
-        telegramLinkRegistered=response.ok&&result.ok===true;
-        if(!telegramLinkRegistered) console.warn('Telegram link registration failed:',result.error||response.status);
-      }catch(err){telegramLinkRegistered=false;console.warn('Telegram link registration failed:',err);}
-    }
     const idx=S.clients.findIndex(x=>x.id===obj.id);
     if(idx>=0) S.clients[idx]=obj; else S.clients.push(obj);
     if(idx>=0){
@@ -1992,8 +1979,26 @@ function openClientForm(existing){
       if((oldComment||'')!==(obj.comment||'')) logAudit('edit','Клиент',obj.name,`Изменён комментарий`);
     }
     closeModal();
-    toast(telegramToken?(telegramLinkRegistered?'Клиент сохранён. Ссылка Telegram активирована.':'Клиент сохранён, но ссылка Telegram не зарегистрировалась. Проверь интернет и сохрани карточку ещё раз.'):'Клиент сохранён');
+    toast('Клиент сохранён');
     if(currentRoute==='clients') go('clients');
+    if(telegramToken){
+      const registrationToast=()=>toast('Карточка сохранена, но ссылку Telegram не удалось зарегистрировать. Открой карточку и нажми «Сохранить» ещё раз.');
+      try{
+        const controller=new AbortController();
+        const timer=setTimeout(()=>controller.abort(),10000);
+        fetch('https://jgzzdsittnzomedvsspj.supabase.co/functions/v1/inkos-telegram-link',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','apikey':'sb_publishable_z40zmd4oAy9jUr3Q4BgDYQ_-IpiIlJe'},
+          body:JSON.stringify({token:telegramToken,clientId:String(obj.id),kind:'client',name:obj.name,phone:obj.phone||''}),
+          signal:controller.signal
+        }).then(async response=>{
+          clearTimeout(timer);
+          const result=await response.json().catch(()=>({}));
+          if(response.ok&&result.ok===true) toast('Ссылка Telegram активирована — можно отправлять клиенту.');
+          else {console.warn('Telegram link registration failed:',result.error||response.status);registrationToast();}
+        }).catch(err=>{clearTimeout(timer);console.warn('Telegram link registration failed:',err);registrationToast();});
+      }catch(err){console.warn('Telegram link registration failed:',err);registrationToast();}
+    }
   };
 }
 function deleteClient(id){
@@ -4736,7 +4741,7 @@ function generateAppIcon(){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
     const swUrl=new URL('sw.js',document.baseURI);
-    swUrl.searchParams.set('build','premium-20261010-v13-telegram-link-cloud-register');
+    swUrl.searchParams.set('build','premium-20261010-v14-client-save-fix');
     navigator.serviceWorker.register(swUrl,{updateViaCache:'none'}).then(reg=>reg.update()).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
