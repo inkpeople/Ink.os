@@ -1971,8 +1971,20 @@ function openClientForm(existing){
   const vkCodePreview=$('#vkLinkCodePreview'), vkCodeCopy=$('#copyVkCode'), vkTokenField=$('#vkLinkTokenField');
   const vkExisting=$('#checkVkExisting');
   if(vkExisting) vkExisting.onclick=async()=>{
-    const token=String(vkTokenField?.value||'').trim().toUpperCase();
-    if(!token){toast('Сначала создай код и сохрани карточку клиента.');return;}
+    let token=String(vkTokenField?.value||'').trim().toUpperCase();
+    if(!token){
+      try{
+        if(window.crypto&&typeof window.crypto.getRandomValues==='function'){
+          const bytes=new Uint8Array(6);window.crypto.getRandomValues(bytes);
+          token=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('').toUpperCase();
+        }else{for(let i=0;i<12;i++)token+='0123456789ABCDEF'[Math.floor(Math.random()*16)];}
+        if(vkTokenField)vkTokenField.value=token;
+        if(vkCodePreview)vkCodePreview.value='INK-'+token;
+        if(vkCodeCopy)vkCodeCopy.disabled=false;
+        toast('Подготовил внутренний код. Сохрани карточку, затем снова нажми «Проверить существующий диалог». Код клиенту пока отправлять не нужно.');
+      }catch(e){toast('Не удалось подготовить код привязки.');}
+      return;
+    }
     const oldText=vkExisting.textContent; vkExisting.disabled=true; vkExisting.textContent='Проверяю диалоги…';
     try{
       const response=await fetch('https://jgzzdsittnzomedvsspj.supabase.co/functions/v1/inkos-vk-existing-dialog',{
