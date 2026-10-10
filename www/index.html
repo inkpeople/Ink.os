@@ -4806,6 +4806,32 @@ function pushCandidates(hz){
   if(cfg.write) S.events.filter(e=>e.type==='session'&&e.status==='completed'&&e.clientId).forEach(e=>{ const c=S.clients.find(x=>x.id===e.clientId); if(!c) return; const who=pc.names?' '+c.name:' клиенту';
     if(!e.careSent){ const nx=isoL(new Date(new Date(e.date+'T12:00').getTime()+86400000)); put('care-'+e.id,[D(e.date,12),D(nx,12)].find(t=>t>now)||0,'Уход',`Отправьте${who} инструкцию по уходу.`); }
     if(e.healCheck) put(`heal-${e.id}-${e.healCheck}`,D(e.healCheck,10),'Заживление',`Напишите${who}: узнайте, как заживает, и попросите фото.`); });
+  // INK.OS annual client-care and win-back reminders. These notify the master to contact the client; they do not message clients automatically.
+  const retentionDone=new Set((S.notifications||[]).filter(n=>n.type==='retention-sent').map(n=>n.refId));
+  const retentionStages=[
+    {days:0,hours:2,tag:'after2h',title:'Проверить самочувствие',text:'Узнайте, как клиент чувствует себя после сеанса.'},
+    {days:3,tag:'day3',title:'Проверить заживление · 3 дня',text:'Напишите клиенту и уточните, как проходит заживление.'},
+    {days:7,tag:'day7',title:'Связаться с клиентом · 7 дней',text:'Узнайте, как выглядит татуировка и есть ли вопросы.'},
+    {days:14,tag:'day14',title:'Проверить заживление · 14 дней',text:'Уточните состояние татуировки и при желании попросите фото.'},
+    {days:30,tag:'day30',title:'Вернуть клиента · 30 дней',text:'Предложите обсудить продолжение проекта или новую татуировку.'},
+    {days:60,tag:'day60',title:'Вернуть клиента · 60 дней',text:'Напомните о возможности следующего сеанса.'},
+    {days:90,tag:'day90',title:'Контакт с клиентом · 3 месяца',text:'Узнайте впечатления и предложите обсудить новую идею.'},
+    {days:120,tag:'day120',title:'Контакт с клиентом · 4 месяца',text:'Напомните, что можно продолжить композицию или начать новый проект.'},
+    {days:180,tag:'day180',title:'Вернуть клиента · 6 месяцев',text:'Свяжитесь с клиентом и предложите запланировать следующий проект.'},
+    {days:270,tag:'day270',title:'Вернуть клиента · 9 месяцев',text:'Мягко напомните о себе и предложите обсудить идею.'},
+    {days:365,tag:'day365',title:'Годовщина татуировки',text:'Узнайте, как результат спустя год, и предложите новую работу.'}
+  ];
+  S.events.filter(e=>e.type==='session'&&e.status==='completed'&&e.clientId&&e.date).forEach(e=>{
+    const c=S.clients.find(x=>x.id===e.clientId); if(!c)return;
+    const base=new Date(e.date+'T'+(e.end||e.start||'12:00')); if(isNaN(base.getTime())||now-base.getTime()>366*86400000)return;
+    retentionStages.forEach(m=>{
+      const ref='retention:'+e.id+':'+m.tag; if(retentionDone.has(ref))return;
+      const when=new Date(base.getTime()+m.days*86400000+(m.hours||0)*3600000).getTime();
+      if(when<=now) return;
+      const who=pc.names?' '+c.name:' клиенту';
+      put(ref,when,m.title,(m.text.replace('клиента',who.trim()||'клиента')));
+    });
+  });
   return out;
 }
 let _pushBusy=false;
