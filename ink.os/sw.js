@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-premium-v11-nav-fix';
+const CACHE_NAME = 'ink-os-shell-premium-v12-nav-fix';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
