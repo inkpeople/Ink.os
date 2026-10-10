@@ -2006,7 +2006,16 @@ function openClientForm(existing){
       }
     }catch(err){
       console.warn('VK existing dialog lookup failed:',err);
-      toast(String(err?.message||'').includes('VK_ACCESS_TOKEN_NOT_CONFIGURED')?'В Supabase не настроен VK_ACCESS_TOKEN.':'Не удалось проверить диалоги. Проверь токен сообщества и доступ к сообщениям.');
+      const detail=String(err?.message||'UNKNOWN_ERROR').replace(/[^A-Z0-9_:-]/gi,'').slice(0,70)||'UNKNOWN_ERROR';
+      if(detail==='VK_ACCESS_TOKEN_NOT_CONFIGURED'){
+        toast('В Supabase отсутствует VK_ACCESS_TOKEN. Добавь токен сообщества в Secrets.');
+      }else if(detail==='VK_API_5'){
+        toast('ВК отклонил токен (VK_API_5). Создай новый токен сообщества с доступом к сообщениям и замени VK_ACCESS_TOKEN в Supabase.');
+      }else if(detail==='VK_API_7'||detail==='VK_API_15'||detail==='VK_API_27'){
+        toast('У токена ВК нет нужных прав ('+detail+'). Проверь доступ к сообщениям сообщества и создай токен с нужными разрешениями.');
+      }else{
+        toast('Ошибка проверки ВК: '+detail+'. Проверь VK_ACCESS_TOKEN и доступ к сообщениям.');
+      }
     }finally{vkExisting.disabled=false;vkExisting.textContent=oldText;}
   };
   if(vkGenerate && vkPreview && vkTokenField){
