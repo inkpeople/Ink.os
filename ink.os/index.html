@@ -1899,10 +1899,22 @@ function openClientForm(existing){
       if(tgCopy) tgCopy.disabled=!token;
     };
     tgGenerate.onclick=()=>{
-      const bytes=new Uint8Array(24); crypto.getRandomValues(bytes);
-      tgTokenField.value=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
-      refreshTelegramLink();
-      toast('Ссылка создана. Сохрани карточку перед отправкой клиенту.');
+      try{
+        let token='';
+        if(window.crypto && typeof window.crypto.getRandomValues==='function'){
+          const bytes=new Uint8Array(24); window.crypto.getRandomValues(bytes);
+          token=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+        }else{
+          for(let i=0;i<48;i++) token+=Math.floor(Math.random()*16).toString(16);
+        }
+        tgTokenField.value=token;
+        refreshTelegramLink();
+        tgPreview.focus();
+        toast('Ссылка создана. Сохрани карточку перед отправкой клиенту.');
+      }catch(err){
+        console.error('Telegram link generation failed:',err);
+        alert('Не удалось создать ссылку. Закрой карточку клиента, открой её снова и попробуй ещё раз.');
+      }
     };
     if(tgCopy) tgCopy.onclick=async()=>{
       if(!tgPreview.value) return;
@@ -3525,10 +3537,22 @@ function openStudentForm(existing){
       if(stCopy) stCopy.disabled=!token;
     };
     stGenerate.onclick=()=>{
-      const bytes=new Uint8Array(24); crypto.getRandomValues(bytes);
-      stTokenField.value=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
-      refreshStudentTelegramLink();
-      toast('Ссылка создана. Сохрани карточку ученика перед отправкой.');
+      try{
+        let token='';
+        if(window.crypto && typeof window.crypto.getRandomValues==='function'){
+          const bytes=new Uint8Array(24); window.crypto.getRandomValues(bytes);
+          token=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+        }else{
+          for(let i=0;i<48;i++) token+=Math.floor(Math.random()*16).toString(16);
+        }
+        stTokenField.value=token;
+        refreshStudentTelegramLink();
+        stPreview.focus();
+        toast('Ссылка создана. Сохрани карточку ученика перед отправкой.');
+      }catch(err){
+        console.error('Student Telegram link generation failed:',err);
+        alert('Не удалось создать ссылку. Закрой карточку ученика, открой её снова и попробуй ещё раз.');
+      }
     };
     if(stCopy) stCopy.onclick=async()=>{
       if(!stPreview.value) return;
@@ -4662,7 +4686,7 @@ function generateAppIcon(){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
     const swUrl=new URL('sw.js',document.baseURI);
-    swUrl.searchParams.set('build','premium-20261010-v9-telegram-link-fix');
+    swUrl.searchParams.set('build','premium-20261010-v10-telegram-link-fix');
     navigator.serviceWorker.register(swUrl,{updateViaCache:'none'}).then(reg=>reg.update()).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
