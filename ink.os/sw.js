@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-premium-v20-auto-care-telegram';
+const CACHE_NAME = 'ink-os-shell-premium-v21-vk-link';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
