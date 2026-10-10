@@ -735,7 +735,7 @@ table{border-collapse:separate!important;border-spacing:0!important;font-size:12
 
 <script>
 /* ====================== APP STATE / CONSTANTS ====================== */
-const DB_NAME='inkos_db', DB_VER=4;
+const DB_NAME='inkos_db', DB_VER=5;
 let db=null;
 const STORES=['clients','events','payments','finance','tattooWork','photos','students','homework','inventory','cartridgeUsage','healingFilmSales','guestSpots','cities','reminders','tasks','notifications','settings','backups','projects','consents','auditLog'];
 const EVENT_TYPES={
@@ -1359,7 +1359,13 @@ function go(route){
   $('#tipsBtn').classList.toggle('hidden', route!=='dashboard');
   const fn=RENDERERS[route];
   $('#content').innerHTML = fn ? '' : '<p class="dim">Раздел в разработке.</p>';
-  if(fn) fn();
+  if(fn){
+    try { fn(); }
+    catch(err){
+      console.error('INK.OS: не удалось открыть раздел '+route,err);
+      $('#content').innerHTML = '<section style="margin:16px;padding:20px;border:1px solid #493333;border-radius:16px;background:#171313;color:#f2eeee"><h2 style="margin:0 0 10px">Не удалось загрузить раздел</h2><p style="color:#bcb2b2">Данные приложения сохранены. Попробуйте открыть раздел ещё раз.</p><button class="btn primary" type="button" onclick="go(\''+route+'\')">Повторить</button></section>';
+    }
+  }
   window.scrollTo(0,0);
   $('#content').scrollTop=0;
 }
@@ -1439,8 +1445,8 @@ async function bootApp(){
   $('#app').classList.remove('hidden');
   buildNav();
   requestNotifPermission();
-  computeAutoNotifications();
-  renderNotifCount();
+  try { computeAutoNotifications(); } catch(err) { console.error('INK.OS: ошибка напоминаний',err); }
+  try { renderNotifCount(); } catch(err) { console.error('INK.OS: ошибка счётчика уведомлений',err); }
   go('dashboard');
   setInterval(()=>{ computeAutoNotifications(); }, 60000);
   setupInactivityLock();
@@ -4553,7 +4559,7 @@ function generateAppIcon(){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
     const swUrl=new URL('sw.js',document.baseURI);
-    swUrl.searchParams.set('build','premium-20261009-v5-ai');
+    swUrl.searchParams.set('build','premium-20261010-v6-startup-fix');
     navigator.serviceWorker.register(swUrl,{updateViaCache:'none'}).then(reg=>reg.update()).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
