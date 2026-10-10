@@ -1840,6 +1840,19 @@ function openClientForm(existing){
     <div><label style="margin-top:0">MAX</label><input name="max" value="${esc(c.max)}" placeholder="ссылка/ID"></div>
   </div>
   <label>WhatsApp</label><input name="whatsapp" value="${esc(c.whatsapp)}">
+  <div class="card" style="margin-top:12px;border-color:var(--line-red)">
+    <div style="font-weight:800;margin-bottom:4px">Автоматические напоминания о сеансах</div>
+    <p class="small dim" style="margin:0 0 8px;line-height:1.5">Для автоматической отправки клиент должен согласиться получать сообщения и заранее открыть диалог с ботом или сообществом. Обычная ссылка на профиль не заменяет ID чата.</p>
+    <label class="ck-row" style="display:flex;gap:10px;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="clientReminderConsent" ${c.reminderConsent===true||String(c.reminderConsent)==='true'?'checked':''}><span>Клиент согласен получать напоминания</span></label>
+    <label>Канал напоминания</label>
+    <select name="reminderChannel">
+      <option value="telegram" ${(c.reminderChannel||'telegram')==='telegram'?'selected':''}>Telegram</option>
+      <option value="vk" ${c.reminderChannel==='vk'?'selected':''}>ВКонтакте</option>
+    </select>
+    <label>Telegram Chat ID</label><input name="telegramChatId" value="${esc(c.telegramChatId||'')}" placeholder="Числовой ID чата, не @username">
+    <label>VK Peer ID</label><input name="vkPeerId" value="${esc(c.vkPeerId||'')}" placeholder="Числовой peer_id диалога">
+    <p class="small dim" style="margin:8px 0 0">Напоминания отправляются за 24 часа и за 2 часа до записи, если серверное подключение и токен канала настроены.</p>
+  </div>
   <label>Другая ссылка на профиль</label><input name="profileLink" value="${esc(c.profileLink)}">
   <div class="field-row">
     <div><label>Город</label><input name="city" value="${esc(c.city)}"></div>
@@ -1873,7 +1886,11 @@ function openClientForm(existing){
     const oldStatus=c.status, oldComment=c.comment;
     const obj={...c};
     fd.forEach((v,k)=>obj[k]=v);
-    obj.quickNotes=$$('#quickNotesWrap .chip.active').map(ch=>ch.dataset.n);
+    obj.reminderConsent=!!$('#clientReminderConsent')?.checked;
+    obj.reminderChannel=String(obj.reminderChannel||'telegram').toLowerCase()==='vk'?'vk':'telegram';
+    obj.telegramChatId=String(obj.telegramChatId||'').trim();
+    obj.vkPeerId=String(obj.vkPeerId||'').trim();
+    obj.quickNotes=$('#quickNotesWrap .chip.active').map(ch=>ch.dataset.n);
     if(!obj.id) obj.id=uid();
     await idbPut('clients',obj);
     const idx=S.clients.findIndex(x=>x.id===obj.id);
