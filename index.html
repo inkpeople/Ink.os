@@ -1772,6 +1772,7 @@ function openClient(id,tab){
   <div class="cl-actions">
     <button class="btn btn-primary" onclick="closeModal();go('calendar');openEventForm(null,{clientId:'${id}'})">${icon('plus')} Новая запись</button>
     <button class="btn" onclick="openMessageTemplates('${id}')">${icon('message')} Сообщение</button>
+    <button class="btn" style="grid-column:1 / -1" onclick="window.startVkLink('${id}')">Подключить VK</button>
   </div>
   <div class="cl-tabs">
     ${['info','history','projects','photos','anketa'].map(t=>`<button data-t="${t}" class="${tab===t?'active':''}">${{info:'Основное',history:'История',projects:'Проекты',photos:'Фото',anketa:'Анкета'}[t]}</button>`).join('')}
