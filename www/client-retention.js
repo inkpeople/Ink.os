@@ -50,19 +50,19 @@
   function channelLink(c,channel,message){
     var raw=String(channel==='vk'?(c.vk||''):(c.telegram||'')).trim();
     if(!raw)return '';
-    var url='';
+    var url='',lower=raw.toLowerCase();
     if(channel==='telegram'){
-      if(/^https?:\\/\\//i.test(raw))url=raw;
-      else url='https://t.me/'+raw.replace(/^@/,'').replace(/^(www\\.)?(t\\.me|telegram\\.me)\\//i,'');
-      if(message&&/^https?:\\/\\/(www\\.)?(t\\.me|telegram\\.me)\\/[^/?#]+/i.test(url))url+=(url.indexOf('?')>=0?'&':'?')+'text='+encodeURIComponent(message);
+      if(lower.indexOf('http://')===0||lower.indexOf('https://')===0)url=raw;
+      else {raw=raw.replace(/^@/,'');if(raw.toLowerCase().indexOf('t.me/')===0)raw=raw.slice(5);if(raw.toLowerCase().indexOf('www.t.me/')===0)raw=raw.slice(9);url='https://t.me/'+raw;}
+      if(message&&url.indexOf('t.me/')>=0&&url.indexOf('?')<0)url+='?text='+encodeURIComponent(message);
       return url;
     }
-    if(/^https?:\\/\\//i.test(raw))return raw;
-    raw=raw.replace(/^@/,'').replace(/^vk\\.com\\//i,'');
+    if(lower.indexOf('http://')===0||lower.indexOf('https://')===0)return raw;
+    raw=raw.replace(/^@/,'');if(raw.toLowerCase().indexOf('vk.com/')===0)raw=raw.slice(7);
     if(/^id?\\d+$/i.test(raw))return 'https://vk.com/im?sel='+raw.replace(/^id/i,'');
     return 'https://vk.com/'+raw;
   }
-  function safe(s){return esc(String(s==null?'':s));}
+    function safe(s){return esc(String(s==null?'':s));}
   RENDERERS.retention=function(){
     var all=getTasks(),now=new Date(),q=(window._retentionQuery||'').toLowerCase();
     var due=all.filter(function(t){return t.due<=now;});
