@@ -660,7 +660,7 @@ table{border-collapse:separate!important;border-spacing:0!important;font-size:12
 .ai-chat-input{flex:1;min-width:0;min-height:43px;max-height:110px;resize:vertical;padding:11px 12px;border:1px solid #3c2b29;border-radius:11px;background:#0f0d0c;color:#f4e9e1;outline:none;font-size:13px;line-height:1.35}
 .ai-chat-input:focus{border-color:#9a5147;box-shadow:0 0 0 3px rgba(169,68,61,.11)}
 .ai-send{height:43px;min-width:46px;padding:0 14px;border:1px solid #6f302d;border-radius:11px;background:linear-gradient(180deg,#a94940,#732925);color:#fff;font-size:15px;font-weight:900}
-.ai-note{font-size:11px;color:#8f837d;line-height:1.5;padding:0 2px}
+.ai-provider-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.ai-provider-panel{padding:16px;border:1px solid #49302b;border-radius:14px;background:linear-gradient(145deg,#1b1514,#100e0d)}.ai-provider-panel h3{font-size:15px;margin:0 0 8px}.ai-provider-panel input[type=password]{margin-bottom:4px}.ai-provider-panel .small{font-size:11px;line-height:1.5}.ai-provider-panel .ai-consent{display:flex;align-items:flex-start;gap:9px;margin:12px 0;text-transform:none;letter-spacing:0;font-size:12px;line-height:1.45}.ai-provider-panel .ai-consent input{width:17px;height:17px;flex-shrink:0;margin:1px 0 0;accent-color:var(--red)}.ai-note{font-size:11px;color:#8f837d;line-height:1.5;padding:0 2px}
 @media(max-width:760px){
  .assistant-fab{right:12px;bottom:calc(78px + env(safe-area-inset-bottom));padding:11px 13px}
  .assistant-fab .fab-label{font-size:12px}
@@ -5229,10 +5229,72 @@ function aiAssistantPaintMessages(){
   const host=$('#aiMessages');
   if(!host) return;
   const history=window.__inkosAssistantHistory||[];
-  host.innerHTML=history.map(m=>'<div class="ai-message '+(m.role==='user'?'user':'assistant')+'"><div class="ai-message-name">'+(m.role==='user'?'Ты':'INK.OS · помощник')+'</div><div class="ai-message-text">'+esc(m.text).replace(/\n/g,'<br>')+'</div></div>').join('');
+  host.innerHTML=history.map(m=>'<div class="ai-message '+(m.role==='user'?'user':'assistant')+'"><div class="ai-message-name">'+(m.role==='user'?'Ты':('INK.OS · '+esc(m.provider||'локальный помощник')))+'</div><div class="ai-message-text">'+esc(m.text).replace(/\n/g,'<br>')+'</div></div>').join('');
   host.scrollTop=host.scrollHeight;
 }
-function aiAssistantAsk(text){
+function aiProviderConfig(){
+  const p=Object.assign({geminiKey:'',openRouterKey:'',cloudEnabled:false},S.settings.aiProviders||{});
+  return p;
+}
+async function aiProviderSave(){
+  const p=aiProviderConfig();
+  p.geminiKey=String($('#aiGeminiKey')?.value||'').trim();
+  p.openRouterKey=String($('#aiOpenRouterKey')?.value||'').trim();
+  p.cloudEnabled=!!$('#aiCloudEnabled')?.checked;
+  S.settings.aiProviders=p;
+  await saveSettings();
+  const status=$('#aiProviderStatus');
+  if(status) status.textContent=p.cloudEnabled?'Облачные ИИ включены: Gemini → OpenRouter → локальный бот':'Облачные ИИ выключены: отвечает локальный бот';
+  toast('Настройки ИИ сохранены на этом устройстве');
+}
+function aiProviderToggle(){
+  const panel=$('#aiProviderPanel');
+  if(panel) panel.classList.toggle('hidden');
+}
+async function aiProviderCall(q, provider, cfg, crmContext){
+  const system='Ты — INK.OS Intelligence, практичный ИИ-помощник тату-мастера и владельца студии. Отвечай по-русски, быстро, конкретно и без воды. Не выдумывай цифры, даты, клиентов и факты. Если предоставлен локальный расчёт CRM, считай его источником истины; если данных недостаточно — честно скажи. Для вопросов не о CRM отвечай по общим знаниям, отмечай неопределённость там, где это важно. Не повторяй и не раскрывай API-ключи. Контекст CRM может содержать персональные данные — используй только то, что нужно для ответа.';
+  const prompt='Вопрос пользователя:\n'+q+'\n\nЛокальная подсказка/расчёт INK.OS (если применимо; не выдумывай данные сверх неё):\n'+crmContext;
+  if(provider==='Gemini'){
+    const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+encodeURIComponent(cfg.geminiKey),{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({system_instruction:{parts:[{text:system}]},contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.25,maxOutputTokens:900}})
+    });
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error('Gemini HTTP '+res.status+(data.error&&data.error.message?': '+data.error.message:''));
+    const answer=(data.candidates||[]).flatMap(x=>x.content&&x.content.parts||[]).map(x=>x.text||'').join('\n').trim();
+    if(!answer) throw new Error('Gemini не вернул ответ');
+    return {text:answer,provider:'Gemini'};
+  }
+  const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.openRouterKey,'HTTP-Referer':location.origin,'X-Title':'INK.OS Intelligence'},
+    body:JSON.stringify({model:'openrouter/free',messages:[{role:'system',content:system},{role:'user',content:prompt}],temperature:0.25,max_tokens:900})
+  });
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error('OpenRouter HTTP '+res.status+(data.error&&data.error.message?': '+data.error.message:''));
+  const answer=String(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content||'').trim();
+  if(!answer) throw new Error('OpenRouter не вернул ответ');
+  return {text:answer,provider:'OpenRouter · free'};
+}
+async function aiAssistantCloudAnswer(q){
+  const cfg=aiProviderConfig();
+  if(!cfg.cloudEnabled) return null;
+  const local=aiAssistantAnswer(q);
+  const generic=local.startsWith('Я работаю в бесплатном локальном режиме:')||local.startsWith('В базе INK.OS сейчас ');
+  const crmContext=generic?'Отдельного локального расчёта для этого вопроса нет. Не делай вид, что видел данные, которых нет.':local;
+  const failures=[];
+  if(cfg.geminiKey){
+    try{return await aiProviderCall(q,'Gemini',cfg,crmContext);}
+    catch(e){failures.push('Gemini: '+String(e.message||e));console.warn('INK.OS Gemini fallback',e);}
+  }
+  if(cfg.openRouterKey){
+    try{return await aiProviderCall(q,'OpenRouter',cfg,crmContext);}
+    catch(e){failures.push('OpenRouter: '+String(e.message||e));console.warn('INK.OS OpenRouter fallback',e);}
+  }
+  if(failures.length) console.warn('INK.OS AI quota/provider fallback to local bot',failures.join(' | '));
+  return null;
+}
+async function aiAssistantAsk(text){
   const q=String(text||'').trim();
   if(!q) return;
   const history=window.__inkosAssistantHistory=window.__inkosAssistantHistory||[];
@@ -5240,11 +5302,20 @@ function aiAssistantAsk(text){
   aiAssistantPaintMessages();
   const input=$('#aiChatInput');if(input)input.value='';
   const send=$('#aiSendBtn');if(send)send.disabled=true;
-  setTimeout(function(){
-    history.push({role:'assistant',text:aiAssistantAnswer(q)});
-    aiAssistantPaintMessages();
-    const currentSend=$('#aiSendBtn');if(currentSend)currentSend.disabled=false;
-  },80);
+  history.push({role:'assistant',text:'Подбираю доступный ИИ…',provider:'подключение'});
+  aiAssistantPaintMessages();
+  let answer=null;
+  try{answer=await aiAssistantCloudAnswer(q);}catch(e){console.warn('INK.OS AI error',e);}
+  const pending=history.findLastIndex?history.findLastIndex(m=>m.role==='assistant'&&m.provider==='подключение'):(()=>{for(let i=history.length-1;i>=0;i--)if(history[i].role==='assistant'&&history[i].provider==='подключение')return i;return -1;})();
+  if(pending>=0) history.splice(pending,1);
+  if(answer) history.push({role:'assistant',text:answer.text,provider:answer.provider});
+  else {
+    const cfg=aiProviderConfig();
+    const reason=cfg.cloudEnabled&&(cfg.geminiKey||cfg.openRouterKey)?'Оба облачных ИИ недоступны или исчерпали лимит. Переключился на локальный режим.\n\n':'';
+    history.push({role:'assistant',text:reason+aiAssistantAnswer(q),provider:'локальный бот'});
+  }
+  aiAssistantPaintMessages();
+  const currentSend=$('#aiSendBtn');if(currentSend)currentSend.disabled=false;
 }
 function aiAssistantQuick(code){
   const prompts={finance:'Сколько я заработал в этом месяце?',unpaid:'Покажи неоплаченные сеансы',inactive:'Кому из клиентов давно не писал?',week:'Составь план работы на неделю',savings:'Где можно сэкономить?',marketing:'Напиши рекламный пост про реализм',growth:'Проанализируй загруженность и доходность студии',forecast:'Сделай прогноз дохода к концу месяца'};
@@ -5264,6 +5335,14 @@ RENDERERS.assistant=function(){
         '<div class="ai-hero-copy"><div class="ai-title-row"><div class="ai-eyebrow">INK.OS INTELLIGENCE</div><h2>ИИ-помощник</h2></div><p>Финансы, клиенты, записи и развитие тату-студии — в одном чате. Ответы по данным твоей CRM.</p></div>'+
         '<div class="ai-local-badge">● БЕСПЛАТНЫЙ РЕЖИМ</div>'+
       '</section>'+
+      '<div class="ai-provider-toolbar"><button class="btn btn-sm" type="button" onclick="aiProviderToggle()">⚙ Подключить 2 бесплатных ИИ</button><span id="aiProviderStatus" class="small dim">'+(aiProviderConfig().cloudEnabled?'Облачные ИИ включены':'Локальный режим активен')+'</span></div>'+
+      '<section id="aiProviderPanel" class="ai-provider-panel hidden"><h3>Подключение ИИ-агентов</h3><p class="small dim">Порядок ответа: Google Gemini Flash → OpenRouter Free → локальный бот. При ошибке, лимите или недоступности первого агента приложение пробует второго, затем отвечает локально. Нужны бесплатные API-ключи; они хранятся только в базе этого браузера на этом устройстве.</p>'+
+      '<label for="aiGeminiKey">Агент 1 · Google Gemini API key</label><input id="aiGeminiKey" type="password" autocomplete="off" placeholder="Вставь ключ Google AI Studio" value="'+esc(aiProviderConfig().geminiKey)+'">'+
+      '<p class="small dim"><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Получить бесплатный ключ Gemini</a></p>'+
+      '<label for="aiOpenRouterKey">Агент 2 · OpenRouter API key</label><input id="aiOpenRouterKey" type="password" autocomplete="off" placeholder="Вставь ключ OpenRouter" value="'+esc(aiProviderConfig().openRouterKey)+'">'+
+      '<p class="small dim"><a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Получить ключ OpenRouter</a> · используем только бесплатный роутер моделей.</p>'+
+      '<label class="ai-consent"><input id="aiCloudEnabled" type="checkbox" '+(aiProviderConfig().cloudEnabled?'checked':'')+'> Разрешаю отправлять мои вопросы и необходимую подсказку из CRM во внешние ИИ-сервисы для генерации ответа.</label>'+
+      '<button class="btn btn-primary btn-block" type="button" onclick="aiProviderSave()">Сохранить настройки ИИ</button><p class="small dim">Ключи не вшиваются в GitHub, но хранятся в локальной базе браузера и доступны этому приложению на устройстве. Не используй на чужом устройстве. Если снять согласие, ответы снова будут только локальными.</p></section>'+
       '<section><div class="ai-quick-title"><strong>Быстрые действия</strong><span>Нажми, чтобы начать</span></div>'+
         '<div class="ai-quick-grid">'+
           '<button class="ai-quick" onclick="aiAssistantQuick(\'finance\')"><span class="ai-q-ic">₽</span><span>Доход, расходы и прибыль</span></button>'+
@@ -5279,7 +5358,7 @@ RENDERERS.assistant=function(){
         '<div id="aiMessages" class="ai-messages" aria-live="polite"></div>'+
         '<form id="aiChatForm" class="ai-chat-form"><input id="aiChatInput" class="ai-chat-input" type="text" autocomplete="off" maxlength="600" placeholder="Например: сколько я заработал в сентябре?"><button id="aiSendBtn" class="ai-send" type="submit" aria-label="Отправить сообщение">➤</button></form>'+
       '</section>'+
-      '<div class="ai-note">Бесплатная версия работает локально, без внешнего ИИ API и без отправки данных клиентов на сторонний сервис. Финансовые ответы считаются по внесённым операциям; тексты и рекомендации пока формируются локальными правилами, а не полноценной нейросетью.</div>'+
+      '<div class="ai-note">Режим без ключей: локальный бот отвечает по правилам и данным INK.OS. При подключении Gemini и OpenRouter вопросы и нужная подсказка CRM отправляются выбранному внешнему сервису. При лимитах или сбоях обоих агентов приложение автоматически возвращается к локальному боту.</div>'+
     '</div>';
   aiAssistantPaintMessages();
   $('#aiChatForm').onsubmit=function(e){e.preventDefault();aiAssistantAsk($('#aiChatInput').value);};
