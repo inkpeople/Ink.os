@@ -5279,7 +5279,7 @@ async function aiAssistantCloudAnswer(q){
   if(failures.length) console.warn('INK.OS cloud models failed; falling back to local bot',failures.join(' | '));
   return null;
 }
-function aiAssistantAsk(text){
+async function aiAssistantAsk(text){
   const q=String(text||'').trim();
   if(!q) return;
   const history=window.__inkosAssistantHistory=window.__inkosAssistantHistory||[];
@@ -5296,7 +5296,7 @@ function aiAssistantAsk(text){
   if(answer) history.push({role:'assistant',text:answer.text,provider:answer.provider});
   else {
     const cfg=aiProviderConfig();
-    const reason=cfg.cloudEnabled&&(cfg.geminiKey||cfg.openRouterKey)?'Оба облачных ИИ недоступны или исчерпали лимит. Переключился на локальный режим.\n\n':'';
+    const reason=cfg.cloudEnabled&&cfg.openRouterKey?'Обе облачные модели недоступны или исчерпали лимит. Переключился на локальный режим.\n\n':'';
     history.push({role:'assistant',text:reason+aiAssistantAnswer(q),provider:'локальный бот'});
   }
   aiAssistantPaintMessages();
