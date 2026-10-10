@@ -47,23 +47,31 @@
     });
     return tasks.sort(function(a,b){return a.due-b.due;});
   }
-  function contactLink(c){
-    var wa=String(c.whatsapp||c.phone||'').replace(/[^\d]/g,'');
-    if(wa.length>=7)return 'https://wa.me/'+wa;
-    var tg=String(c.telegram||'').trim();
-    if(tg)return /^https?:\/\//i.test(tg)?tg:'https://t.me/'+tg.replace(/^@/,'');
-    return '';
+  function channelLink(c,channel,message){
+    var raw=String(channel==='vk'?(c.vk||''):(c.telegram||'')).trim();
+    if(!raw)return '';
+    var url='';
+    if(channel==='telegram'){
+      if(/^https?:\\/\\//i.test(raw))url=raw;
+      else url='https://t.me/'+raw.replace(/^@/,'').replace(/^(www\\.)?(t\\.me|telegram\\.me)\\//i,'');
+      if(message&&/^https?:\\/\\/(www\\.)?(t\\.me|telegram\\.me)\\/[^/?#]+/i.test(url))url+=(url.indexOf('?')>=0?'&':'?')+'text='+encodeURIComponent(message);
+      return url;
+    }
+    if(/^https?:\\/\\//i.test(raw))return raw;
+    raw=raw.replace(/^@/,'').replace(/^vk\\.com\\//i,'');
+    if(/^id?\\d+$/i.test(raw))return 'https://vk.com/im?sel='+raw.replace(/^id/i,'');
+    return 'https://vk.com/'+raw;
   }
   function safe(s){return esc(String(s==null?'':s));}
   RENDERERS.retention=function(){
     var all=getTasks(),now=new Date(),q=(window._retentionQuery||'').toLowerCase();
     var due=all.filter(function(t){return t.due<=now;});
     var future=all.filter(function(t){return t.due>now;});
-    var filtered=all.filter(function(t){return !q||[t.client.name,t.client.phone,t.client.instagram,t.client.telegram,t.client.whatsapp,t.milestone.title].filter(Boolean).join(' ').toLowerCase().indexOf(q)>=0;});
+    var filtered=all.filter(function(t){return !q||[t.client.name,t.client.phone,t.client.instagram,t.client.telegram,t.client.whatsapp,t.client.vk,t.milestone.title].filter(Boolean).join(' ').toLowerCase().indexOf(q)>=0;});
     window._retentionMessageMap={};
     filtered.forEach(function(t){window._retentionMessageMap[t.refId]=t.message;});
     var cards=filtered.map(function(t){
-      var link=contactLink(t.client),dueText=t.due.toLocaleString('ru-RU',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+      var vkLink=channelLink(t.client,'vk',t.message),tgLink=channelLink(t.client,'telegram',t.message),dueText=t.due.toLocaleString('ru-RU',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
       return '<div class="card" style="margin-bottom:9px;border-left:3px solid '+(t.milestone.kind==='care'?'#20b2aa':'#e53935')+'">'+
         '<div class="row" style="align-items:flex-start;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:180px">'+
         '<div class="row" style="justify-content:flex-start;gap:7px;flex-wrap:wrap"><b>'+safe(t.client.name)+'</b><span class="badge '+(t.due<=now?'badge-vip':'badge-new')+'">'+safe(t.milestone.title)+'</span></div>'+
@@ -71,7 +79,9 @@
         '<div style="margin-top:10px;line-height:1.5;white-space:pre-wrap">'+safe(t.message)+'</div></div></div>'+
         '<div class="row" style="gap:7px;flex-wrap:wrap;margin-top:12px;justify-content:flex-start">'+
         '<button class="btn btn-sm btn-primary" onclick="copyRetentionMessage(\''+safe(t.refId)+'\')">Скопировать текст</button>'+
-        (link?'<a class="btn btn-sm" href="'+safe(link)+'" target="_blank" rel="noopener">Открыть связь</a>':'')+
+         (vkLink?'<button class="btn btn-sm" onclick="openRetentionChannel(\\''+safe(t.refId)+'\\',\\'vk\\')">ВКонтакте</button>':'')+
+        (tgLink?'<button class="btn btn-sm" onclick="openRetentionChannel(\\''+safe(t.refId)+'\\',\\'telegram\\')">Telegram</button>':'')+
+        ((!vkLink&&!tgLink)?'<span class="small dim">Добавь VK или Telegram в карточку клиента</span>':'')+
         '<button class="btn btn-sm" onclick="completeRetentionTask(\''+safe(t.refId)+'\')">Отметить выполненным</button>'+
         '<button class="btn btn-sm" onclick="openClient(\''+safe(t.client.id)+'\')">Карточка клиента</button></div></div>';
     }).join('');
@@ -85,6 +95,15 @@
       '<div class="field-row" style="margin-bottom:10px"><input id="retentionSearch" placeholder="Найти клиента или этап..." value="'+safe(window._retentionQuery||'')+'"></div>'+
       '<div id="retentionTasks">'+(cards||'<div class="card dim">Нет касаний. Проверь, что сеансы отмечены как завершённые и привязаны к клиентам.</div>')+'</div>';
     $('#retentionSearch').oninput=function(e){window._retentionQuery=e.target.value;var pos=e.target.selectionStart;RENDERERS.retention();var input=$('#retentionSearch');input.focus();input.setSelectionRange(pos,pos);};
+  };
+  window.openRetentionChannel=async function(refId,channel){
+    var task=getTasks().find(function(t){return t.refId===refId;});
+    if(!task){toast('Касание не найдено. Обнови раздел.','error');return;}
+    var link=channelLink(task.client,channel,task.message);
+    if(!link){toast('Добавь контакт клиента в его карточку','error');return;}
+    try{await navigator.clipboard.writeText(task.message);}catch(e){}
+    window.open(link,'_blank','noopener');
+    toast(channel==='vk'?'Текст скопирован. Вставь его в переписку ВКонтакте.':'Открой черновик в Telegram, проверь текст и отправь вручную.');
   };
   window.copyRetentionMessage=async function(refId){
     var message=(window._retentionMessageMap||{})[refId];
