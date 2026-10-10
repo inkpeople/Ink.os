@@ -5321,7 +5321,7 @@ RENDERERS.assistant=function(){
         '<div class="ai-local-badge">● БЕСПЛАТНЫЙ РЕЖИМ</div>'+
       '</section>'+
       '<div class="ai-provider-toolbar"><button class="btn btn-sm" type="button" onclick="aiProviderToggle()">⚙ Настроить бесплатные ИИ</button><span id="aiProviderStatus" class="small dim">'+(aiProviderConfig().cloudEnabled?'OpenRouter Free → Qwen → локальный бот':'Локальный режим активен')+'</span></div>'+
-      '<section id="aiProviderPanel" class="ai-provider-panel hidden"><h3>Два бесплатных ИИ-агента</h3><p class="small dim">Gemini удалён. Сначала отвечает OpenRouter Free, затем при ошибке или лимите — Qwen3.8 27B Free через тот же OpenRouter API-ключ. Если оба недоступны, отвечает локальный бот. Ранее сохранённый ключ OpenRouter сохранён — вводить его заново не нужно.</p>'+
+      '<section id="aiProviderPanel" class="ai-provider-panel hidden"><h3>Два бесплатных ИИ-агента</h3><p class="small dim">Сначала отвечает OpenRouter Free, затем при ошибке или лимите — Qwen3.8 27B Free через тот же OpenRouter API-ключ. Если оба недоступны, отвечает локальный бот. Ранее сохранённый ключ OpenRouter сохранён — вводить его заново не нужно.</p>'+
       '<label for="aiOpenRouterKey">OpenRouter API key</label><input id="aiOpenRouterKey" type="password" autocomplete="off" placeholder="Сохранённый ключ OpenRouter" value="'+esc(aiProviderConfig().openRouterKey)+'">'+
       '<p class="small dim"><a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Открыть ключи OpenRouter</a>. Обе модели бесплатные, но имеют ограничения доступности и запросов.</p>'+
       '<label class="ai-consent"><input id="aiCloudEnabled" type="checkbox" '+(aiProviderConfig().cloudEnabled?'checked':'')+'> Разрешаю отправлять вопросы и необходимую подсказку из CRM во внешний ИИ-сервис.</label>'+
@@ -5341,7 +5341,7 @@ RENDERERS.assistant=function(){
         '<div id="aiMessages" class="ai-messages" aria-live="polite"></div>'+
         '<form id="aiChatForm" class="ai-chat-form"><input id="aiChatInput" class="ai-chat-input" type="text" autocomplete="off" maxlength="600" placeholder="Например: сколько я заработал в сентябре?"><button id="aiSendBtn" class="ai-send" type="submit" aria-label="Отправить сообщение">➤</button></form>'+
       '</section>'+
-      '<div class="ai-note">Режим без ключей: локальный бот отвечает по правилам и данным INK.OS. При подключении Gemini и OpenRouter вопросы и нужная подсказка CRM отправляются выбранному внешнему сервису. При лимитах или сбоях обоих агентов приложение автоматически возвращается к локальному боту.</div>'+
+      '<div class="ai-note">Режим без ключей: локальный бот отвечает по правилам и данным INK.OS. При подключении облачных моделей вопросы и нужная подсказка CRM отправляются в OpenRouter. При лимитах или сбоях обоих агентов приложение автоматически возвращается к локальному боту.</div>'+
     '</div>';
   aiAssistantPaintMessages();
   $('#aiChatForm').onsubmit=function(e){e.preventDefault();aiAssistantAsk($('#aiChatInput').value);};
