@@ -3237,7 +3237,7 @@ function completeSessionForm(eventId){
     // Send tattoo aftercare instructions automatically after session completion.
     if(client && (client.reminderConsent===true || String(client.reminderConsent).toLowerCase()==='true') && (client.reminderChannel||'telegram')==='telegram'){
       const careMessage=(S.settings.careText||CARE_DEFAULT).replace(/\\{name\\}/g,(client.name||'').trim().split(/\\s+/)[0]||'').trim();
-      fetch('https://jgzzdsittnzomedvssppj.supabase.co/functions/v1/inkos-send-care',{
+      fetch('https://jgzzdsittnzomedvsspj.supabase.co/functions/v1/inkos-send-care',{
         method:'POST',
         headers:{'Content-Type':'application/json','apikey':'sb_publishable_z40zmd4oAy9jUr3Q4BgDYQ_-IpiIlJe'},
         body:JSON.stringify({eventId:String(e.id),clientId:String(client.id),message:careMessage})
