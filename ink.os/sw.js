@@ -1,5 +1,5 @@
-const CACHE_NAME = 'ink-os-shell-premium-v25-vk-error-details';
-const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
+const CACHE_NAME = 'ink-os-shell-premium-v26-vk-link';
+const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './vk-link.js', './client-retention.js'];
 
 self.addEventListener('install', event => {
   event.waitUntil(
