@@ -1892,11 +1892,16 @@ function openClientForm(existing){
     <label>VK Peer ID</label><input name="vkPeerId" value="${esc(c.vkPeerId||'')}" placeholder="Числовой peer_id диалога">
     <div class="field-row" style="margin-top:10px">
       <button type="button" class="btn btn-secondary" id="generateTelegramLink">Создать ссылку привязки Telegram</button>
-      <button type="button" class="btn btn-secondary" id="copyTelegramLink" disabled>Копировать ссылку</button>
+      <button type="button" class="btn btn-secondary" id="copyTelegramLink" disabled>Копировать ссылку Telegram</button>
     </div>
-    <input type="text" id="telegramLinkPreview" readonly value="${c.telegramLinkToken?'https://t.me/Ramzestattoo_bot?start=link_'+esc(c.telegramLinkToken):''}" placeholder="Здесь появится персональная ссылка">
+    <input type="text" id="telegramLinkPreview" readonly value="${c.telegramLinkToken?'https://t.me/Ramzestattoo_bot?start=link_'+esc(c.telegramLinkToken):''}" placeholder="Персональная ссылка Telegram">
     <input type="hidden" id="telegramLinkTokenField" name="telegramLinkToken" value="${esc(c.telegramLinkToken||'')}">
-    <p class="small dim" style="margin:8px 0 0">Создай ссылку, сохрани карточку и только после этого отправь её клиенту. Клиент сам подтвердит согласие в Telegram. Напоминания отправляются за 24 часа и за 2 часа до встречи.</p>
+    <div class="field-row" style="margin-top:10px">
+      <button type="button" class="btn btn-secondary" id="generateVkLink">Создать ссылку ВКонтакте</button>
+      <button type="button" class="btn btn-secondary" id="copyVkLink" disabled>Копировать ссылку ВК</button>
+    </div>
+    <input type="text" id="vkLinkPreview" readonly placeholder="Ссылка на диалог сообщества ВКонтакте">
+    <p class="small dim" style="margin:8px 0 0">Telegram-ссылка персональная. Ссылка ВК откроет диалог с сообществом; чтобы автоматические напоминания работали, клиент должен написать сообществу, а его VK Peer ID нужно связать с карточкой. Отправка возможна только при согласии клиента.</p>
   </div>
   <label>Другая ссылка на профиль</label><input name="profileLink" value="${esc(c.profileLink)}">
   <div class="field-row">
@@ -1957,6 +1962,16 @@ function openClientForm(existing){
       catch(e){ tgPreview.focus(); tgPreview.select(); toast('Выдели ссылку и скопируй вручную'); }
     };
     refreshTelegramLink();
+  }
+  const vkGenerate=$('#generateVkLink'), vkPreview=$('#vkLinkPreview'), vkCopy=$('#copyVkLink');
+  if(vkGenerate && vkPreview){
+    const refreshVkLink=()=>{ vkPreview.value='https://vk.me/blacktattoo54'; if(vkCopy) vkCopy.disabled=false; };
+    vkGenerate.onclick=()=>{ refreshVkLink(); vkPreview.focus(); toast('Ссылка на диалог ВКонтакте создана. Сохрани карточку и отправь ссылку клиенту.'); };
+    if(vkCopy) vkCopy.onclick=async()=>{
+      if(!vkPreview.value) refreshVkLink();
+      try{ await navigator.clipboard.writeText(vkPreview.value); toast('Ссылка ВК скопирована'); }
+      catch(e){ vkPreview.focus(); vkPreview.select(); toast('Выдели ссылку и скопируй вручную'); }
+    };
   }
   $('#clientForm').onsubmit=async e=>{
     e.preventDefault();
@@ -4759,7 +4774,7 @@ function generateAppIcon(){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
     const swUrl=new URL('sw.js',document.baseURI);
-    swUrl.searchParams.set('build','premium-20261010-v18-auto-care-vk');
+    swUrl.searchParams.set('build','premium-20261010-v19-vk-link');
     navigator.serviceWorker.register(swUrl,{updateViaCache:'none'}).then(reg=>reg.update()).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
