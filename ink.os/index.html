@@ -5233,68 +5233,53 @@ function aiAssistantPaintMessages(){
   host.scrollTop=host.scrollHeight;
 }
 function aiProviderConfig(){
-  const p=Object.assign({geminiKey:'',openRouterKey:'',cloudEnabled:false},S.settings.aiProviders||{});
+  const p=Object.assign({openRouterKey:'',cloudEnabled:false},S.settings.aiProviders||{});
+  delete p.geminiKey;
   return p;
 }
 async function aiProviderSave(){
   const p=aiProviderConfig();
-  p.geminiKey=String($('#aiGeminiKey')?.value||'').trim();
-  p.openRouterKey=String($('#aiOpenRouterKey')?.value||'').trim();
+  p.openRouterKey=String($('#aiOpenRouterKey')?.value||p.openRouterKey||'').trim();
   p.cloudEnabled=!!$('#aiCloudEnabled')?.checked;
   S.settings.aiProviders=p;
   await saveSettings();
   const status=$('#aiProviderStatus');
-  if(status) status.textContent=p.cloudEnabled?'Облачные ИИ включены: Gemini → OpenRouter → локальный бот':'Облачные ИИ выключены: отвечает локальный бот';
+  if(status) status.textContent=p.cloudEnabled?'OpenRouter: бесплатная модель → Qwen → локальный бот':'Локальный режим активен';
   toast('Настройки ИИ сохранены на этом устройстве');
 }
 function aiProviderToggle(){
   const panel=$('#aiProviderPanel');
   if(panel) panel.classList.toggle('hidden');
 }
-async function aiProviderCall(q, provider, cfg, crmContext){
+async function aiProviderCall(q, model, cfg, crmContext){
   const system='Ты — INK.OS Intelligence, практичный ИИ-помощник тату-мастера и владельца студии. Отвечай по-русски, быстро, конкретно и без воды. Не выдумывай цифры, даты, клиентов и факты. Если предоставлен локальный расчёт CRM, считай его источником истины; если данных недостаточно — честно скажи. Для вопросов не о CRM отвечай по общим знаниям, отмечай неопределённость там, где это важно. Не повторяй и не раскрывай API-ключи. Контекст CRM может содержать персональные данные — используй только то, что нужно для ответа.';
-  const prompt='Вопрос пользователя:\n'+q+'\n\nЛокальная подсказка/расчёт INK.OS (если применимо; не выдумывай данные сверх неё):\n'+crmContext;
-  if(provider==='Gemini'){
-    const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key='+encodeURIComponent(cfg.geminiKey),{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({system_instruction:{parts:[{text:system}]},contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.25,maxOutputTokens:900}})
-    });
-    const data=await res.json().catch(()=>({}));
-    if(!res.ok) throw new Error('Gemini HTTP '+res.status+(data.error&&data.error.message?': '+data.error.message:''));
-    const answer=(data.candidates||[]).flatMap(x=>x.content&&x.content.parts||[]).map(x=>x.text||'').join('\n').trim();
-    if(!answer) throw new Error('Gemini не вернул ответ');
-    return {text:answer,provider:'Gemini'};
-  }
+  const prompt='Вопрос пользователя:\\n'+q+'\\n\\nЛокальная подсказка/расчёт INK.OS (если применимо; не выдумывай данные сверх неё):\\n'+crmContext;
   const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.openRouterKey,'HTTP-Referer':location.origin,'X-Title':'INK.OS Intelligence'},
-    body:JSON.stringify({model:'openrouter/free',messages:[{role:'system',content:system},{role:'user',content:prompt}],temperature:0.25,max_tokens:900})
+    body:JSON.stringify({model,messages:[{role:'system',content:system},{role:'user',content:prompt}],temperature:0.25,max_tokens:900})
   });
   const data=await res.json().catch(()=>({}));
-  if(!res.ok) throw new Error('OpenRouter HTTP '+res.status+(data.error&&data.error.message?': '+data.error.message:''));
+  if(!res.ok) throw new Error('OpenRouter '+model+' HTTP '+res.status+(data.error&&data.error.message?': '+data.error.message:''));
   const answer=String(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content||'').trim();
-  if(!answer) throw new Error('OpenRouter не вернул ответ');
-  return {text:answer,provider:'OpenRouter · free'};
+  if(!answer) throw new Error('Модель '+model+' не вернула ответ');
+  return {text:answer,provider:model==='openrouter/free'?'OpenRouter Free':'Qwen3.8 27B · Free'};
 }
 async function aiAssistantCloudAnswer(q){
   const cfg=aiProviderConfig();
-  if(!cfg.cloudEnabled) return null;
+  if(!cfg.cloudEnabled||!cfg.openRouterKey) return null;
   const local=aiAssistantAnswer(q);
   const generic=local.startsWith('Я работаю в бесплатном локальном режиме:')||local.startsWith('В базе INK.OS сейчас ');
   const crmContext=generic?'Отдельного локального расчёта для этого вопроса нет. Не делай вид, что видел данные, которых нет.':local;
   const failures=[];
-  if(cfg.geminiKey){
-    try{return await aiProviderCall(q,'Gemini',cfg,crmContext);}
-    catch(e){failures.push('Gemini: '+String(e.message||e));console.warn('INK.OS Gemini fallback',e);}
+  for(const model of ['openrouter/free','qwen/qwen3.8-27b:free']){
+    try{return await aiProviderCall(q,model,cfg,crmContext);}
+    catch(e){failures.push(String(e.message||e));console.warn('INK.OS AI fallback',e);}
   }
-  if(cfg.openRouterKey){
-    try{return await aiProviderCall(q,'OpenRouter',cfg,crmContext);}
-    catch(e){failures.push('OpenRouter: '+String(e.message||e));console.warn('INK.OS OpenRouter fallback',e);}
-  }
-  if(failures.length) console.warn('INK.OS AI quota/provider fallback to local bot',failures.join(' | '));
+  if(failures.length) console.warn('INK.OS cloud models failed; falling back to local bot',failures.join(' | '));
   return null;
 }
-async function aiAssistantAsk(text){
+function aiAssistantAsk(text){
   const q=String(text||'').trim();
   if(!q) return;
   const history=window.__inkosAssistantHistory=window.__inkosAssistantHistory||[];
@@ -5335,14 +5320,12 @@ RENDERERS.assistant=function(){
         '<div class="ai-hero-copy"><div class="ai-title-row"><div class="ai-eyebrow">INK.OS INTELLIGENCE</div><h2>ИИ-помощник</h2></div><p>Финансы, клиенты, записи и развитие тату-студии — в одном чате. Ответы по данным твоей CRM.</p></div>'+
         '<div class="ai-local-badge">● БЕСПЛАТНЫЙ РЕЖИМ</div>'+
       '</section>'+
-      '<div class="ai-provider-toolbar"><button class="btn btn-sm" type="button" onclick="aiProviderToggle()">⚙ Подключить 2 бесплатных ИИ</button><span id="aiProviderStatus" class="small dim">'+(aiProviderConfig().cloudEnabled?'Облачные ИИ включены':'Локальный режим активен')+'</span></div>'+
-      '<section id="aiProviderPanel" class="ai-provider-panel hidden"><h3>Подключение ИИ-агентов</h3><p class="small dim">Порядок ответа: Google Gemini Flash → OpenRouter Free → локальный бот. При ошибке, лимите или недоступности первого агента приложение пробует второго, затем отвечает локально. Нужны бесплатные API-ключи; они хранятся только в базе этого браузера на этом устройстве.</p>'+
-      '<label for="aiGeminiKey">Агент 1 · Google Gemini API key</label><input id="aiGeminiKey" type="password" autocomplete="off" placeholder="Вставь ключ Google AI Studio" value="'+esc(aiProviderConfig().geminiKey)+'">'+
-      '<p class="small dim"><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Получить бесплатный ключ Gemini</a></p>'+
-      '<label for="aiOpenRouterKey">Агент 2 · OpenRouter API key</label><input id="aiOpenRouterKey" type="password" autocomplete="off" placeholder="Вставь ключ OpenRouter" value="'+esc(aiProviderConfig().openRouterKey)+'">'+
-      '<p class="small dim"><a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Получить ключ OpenRouter</a> · используем только бесплатный роутер моделей.</p>'+
-      '<label class="ai-consent"><input id="aiCloudEnabled" type="checkbox" '+(aiProviderConfig().cloudEnabled?'checked':'')+'> Разрешаю отправлять мои вопросы и необходимую подсказку из CRM во внешние ИИ-сервисы для генерации ответа.</label>'+
-      '<button class="btn btn-primary btn-block" type="button" onclick="aiProviderSave()">Сохранить настройки ИИ</button><p class="small dim">Ключи не вшиваются в GitHub, но хранятся в локальной базе браузера и доступны этому приложению на устройстве. Не используй на чужом устройстве. Если снять согласие, ответы снова будут только локальными.</p></section>'+
+      '<div class="ai-provider-toolbar"><button class="btn btn-sm" type="button" onclick="aiProviderToggle()">⚙ Настроить бесплатные ИИ</button><span id="aiProviderStatus" class="small dim">'+(aiProviderConfig().cloudEnabled?'OpenRouter Free → Qwen → локальный бот':'Локальный режим активен')+'</span></div>'+
+      '<section id="aiProviderPanel" class="ai-provider-panel hidden"><h3>Два бесплатных ИИ-агента</h3><p class="small dim">Gemini удалён. Сначала отвечает OpenRouter Free, затем при ошибке или лимите — Qwen3.8 27B Free через тот же OpenRouter API-ключ. Если оба недоступны, отвечает локальный бот. Ранее сохранённый ключ OpenRouter сохранён — вводить его заново не нужно.</p>'+
+      '<label for="aiOpenRouterKey">OpenRouter API key</label><input id="aiOpenRouterKey" type="password" autocomplete="off" placeholder="Сохранённый ключ OpenRouter" value="'+esc(aiProviderConfig().openRouterKey)+'">'+
+      '<p class="small dim"><a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Открыть ключи OpenRouter</a>. Обе модели бесплатные, но имеют ограничения доступности и запросов.</p>'+
+      '<label class="ai-consent"><input id="aiCloudEnabled" type="checkbox" '+(aiProviderConfig().cloudEnabled?'checked':'')+'> Разрешаю отправлять вопросы и необходимую подсказку из CRM во внешний ИИ-сервис.</label>'+
+      '<button class="btn btn-primary btn-block" type="button" onclick="aiProviderSave()">Сохранить настройки ИИ</button><p class="small dim">Ключ остаётся в локальной базе этого браузера. Не используй на чужом устройстве. При выключении облачного режима ответы снова будут только локальными.</p></section>'+
       '<section><div class="ai-quick-title"><strong>Быстрые действия</strong><span>Нажми, чтобы начать</span></div>'+
         '<div class="ai-quick-grid">'+
           '<button class="ai-quick" onclick="aiAssistantQuick(\'finance\')"><span class="ai-q-ic">₽</span><span>Доход, расходы и прибыль</span></button>'+
