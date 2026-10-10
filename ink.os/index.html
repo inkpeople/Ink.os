@@ -1897,14 +1897,15 @@ function openClientForm(existing){
     <input type="text" id="telegramLinkPreview" readonly value="${c.telegramLinkToken?'https://t.me/Ramzestattoo_bot?start=link_'+esc(c.telegramLinkToken):''}" placeholder="Персональная ссылка Telegram">
     <input type="hidden" id="telegramLinkTokenField" name="telegramLinkToken" value="${esc(c.telegramLinkToken||'')}">
     <div class="field-row" style="margin-top:10px">
-      <button type="button" class="btn btn-secondary" id="generateVkLink">Создать привязку ВКонтакте</button>
+      <button type="button" class="btn btn-secondary" id="checkVkExisting">Проверить существующий диалог</button>
+      <button type="button" class="btn btn-secondary" id="generateVkLink">Создать код для привязки</button>
       <button type="button" class="btn btn-secondary" id="copyVkLink" disabled>Копировать ссылку ВК</button>
       <button type="button" class="btn btn-secondary" id="copyVkCode" disabled>Копировать код</button>
     </div>
     <input type="text" id="vkLinkPreview" readonly placeholder="Ссылка на диалог сообщества ВКонтакте">
     <input type="text" id="vkLinkCodePreview" readonly placeholder="Персональный код для отправки в диалог">
     <input type="hidden" id="vkLinkTokenField" name="vkLinkToken" value="${esc(c.vkLinkToken||'')}">
-    <p class="small dim" style="margin:8px 0 0">Отправь клиенту ссылку и код. Клиент должен написать код в диалог сообщества, затем подтвердить согласие ответом «ДА». После настройки Callback API VK Peer ID привяжется автоматически.</p>
+    <p class="small dim" style="margin:8px 0 0">Сначала проверь существующий диалог. Если найдено однозначное совпадение по имени, INK.OS привяжет Peer ID. Если найти нельзя, используй код: клиент отправляет его в сообщения сообщества. Согласие на напоминания хранится отдельно.</p>
   </div>
   <label>Другая ссылка на профиль</label><input name="profileLink" value="${esc(c.profileLink)}">
   <div class="field-row">
@@ -1968,6 +1969,34 @@ function openClientForm(existing){
   }
   const vkGenerate=$('#generateVkLink'), vkPreview=$('#vkLinkPreview'), vkCopy=$('#copyVkLink');
   const vkCodePreview=$('#vkLinkCodePreview'), vkCodeCopy=$('#copyVkCode'), vkTokenField=$('#vkLinkTokenField');
+  const vkExisting=$('#checkVkExisting');
+  if(vkExisting) vkExisting.onclick=async()=>{
+    const token=String(vkTokenField?.value||'').trim().toUpperCase();
+    if(!token){toast('Сначала создай код и сохрани карточку клиента.');return;}
+    const oldText=vkExisting.textContent; vkExisting.disabled=true; vkExisting.textContent='Проверяю диалоги…';
+    try{
+      const response=await fetch('https://jgzzdsittnzomedvsspj.supabase.co/functions/v1/inkos-vk-existing-dialog',{
+        method:'POST',headers:{'Content-Type':'application/json','apikey':'sb_publishable_z40zmd4oAy9jUr3Q4BgDYQ_-IpiIlJe'},
+        body:JSON.stringify({token}),signal:AbortSignal.timeout(18000)
+      });
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok||result.ok!==true)throw new Error(result.error||('HTTP_'+response.status));
+      if(result.matched){
+        const peerField=$('#clientForm')?.querySelector('[name="vkPeerId"]');
+        if(peerField)peerField.value=String(result.peerId||'');
+        const local=S.clients.find(x=>String(x.id)===String(c.id));
+        if(local)local.vkPeerId=String(result.peerId||'');
+        toast(result.alreadyLinked?'Диалог ВК уже привязан.':'Диалог найден, VK Peer ID привязан. Нажми «Сохранить» для сохранения карточки.');
+      }else if(result.reason==='AMBIGUOUS_NAME'){
+        toast('Нашлось несколько диалогов с таким именем. Для безопасности используй персональный код.');
+      }else{
+        toast('Однозначный диалог не найден среди последних 200. Используй персональный код привязки.');
+      }
+    }catch(err){
+      console.warn('VK existing dialog lookup failed:',err);
+      toast(String(err?.message||'').includes('VK_ACCESS_TOKEN_NOT_CONFIGURED')?'В Supabase не настроен VK_ACCESS_TOKEN.':'Не удалось проверить диалоги. Проверь токен сообщества и доступ к сообщениям.');
+    }finally{vkExisting.disabled=false;vkExisting.textContent=oldText;}
+  };
   if(vkGenerate && vkPreview && vkTokenField){
     const refreshVkLink=()=>{
       vkPreview.value='https://vk.me/blacktattoo54';
@@ -4815,7 +4844,7 @@ function generateAppIcon(){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
     const swUrl=new URL('sw.js',document.baseURI);
-    swUrl.searchParams.set('build','premium-20261010-v20-vk-auto-bind');
+    swUrl.searchParams.set('build','premium-20261010-v21-vk-existing-dialog');
     navigator.serviceWorker.register(swUrl,{updateViaCache:'none'}).then(reg=>reg.update()).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
