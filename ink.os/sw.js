@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-premium-v13-telegram-link-fix';
+const CACHE_NAME = 'ink-os-shell-premium-v14-telegram-link-delegated';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
