@@ -5255,7 +5255,7 @@ async function aiProviderCall(q, provider, cfg, crmContext){
   const system='Ты — INK.OS Intelligence, практичный ИИ-помощник тату-мастера и владельца студии. Отвечай по-русски, быстро, конкретно и без воды. Не выдумывай цифры, даты, клиентов и факты. Если предоставлен локальный расчёт CRM, считай его источником истины; если данных недостаточно — честно скажи. Для вопросов не о CRM отвечай по общим знаниям, отмечай неопределённость там, где это важно. Не повторяй и не раскрывай API-ключи. Контекст CRM может содержать персональные данные — используй только то, что нужно для ответа.';
   const prompt='Вопрос пользователя:\n'+q+'\n\nЛокальная подсказка/расчёт INK.OS (если применимо; не выдумывай данные сверх неё):\n'+crmContext;
   if(provider==='Gemini'){
-    const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+encodeURIComponent(cfg.geminiKey),{
+    const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key='+encodeURIComponent(cfg.geminiKey),{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({system_instruction:{parts:[{text:system}]},contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.25,maxOutputTokens:900}})
     });
