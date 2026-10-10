@@ -1141,7 +1141,7 @@ function persistLocalFallback(){
 function loadLocalFallback(){
   try{ const raw=localStorage.getItem('inkos_fallback_db'); if(raw) Object.assign(S,JSON.parse(raw)); }catch(e){}
 }
-async async function loadAllData(){
+async function loadAllData(){
   if(db){
     for(const store of STORES){
       if(store==='settings'){
@@ -4559,7 +4559,7 @@ function generateAppIcon(){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
     const swUrl=new URL('sw.js',document.baseURI);
-    swUrl.searchParams.set('build','premium-20261010-v7-async-boot-fix');
+    swUrl.searchParams.set('build','premium-20261010-v8-splash-fix');
     navigator.serviceWorker.register(swUrl,{updateViaCache:'none'}).then(reg=>reg.update()).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
