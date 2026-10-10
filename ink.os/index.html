@@ -1377,6 +1377,8 @@ function renderTipsBadge(){
 $('#tipsBtn').onclick=()=>openDashSheet('tips');
 
 /* ====================== SPLASH SCREEN (INK.OS animation) ====================== */
+let splashDataReady=false;
+let splashFinishRequested=false;
 function runSplash(){
   const st=S.settings||{};
   if(st.splash==='off'){ finishSplash(); return; }
@@ -1386,6 +1388,7 @@ function runSplash(){
   setTimeout(finishSplash, short?2900:5600);
 }
 function finishSplash(){
+  if(!splashDataReady){ splashFinishRequested=true; return; }
   if(finishSplash._done) return;
   finishSplash._done=true;
   const sp=$('#splash');
@@ -1471,12 +1474,23 @@ function finVal(html){
   return S.settings.hideFinance ? `<span title="Финансовые данные скрыты — включите показ в Настройках → Безопасность" style="letter-spacing:2px">••••••</span>` : html;
 }
 async function init(){
-  try{ db=await idbOpen(); }catch(e){ db=null; toast('IndexedDB недоступен — используется резервное хранилище localStorage.'); }
-  await loadAllData();
+  // Start the splash immediately; database startup must never leave a black screen.
+  runSplash();
+  const loadTask=(async()=>{
+    try{ db=await idbOpen(); }catch(e){ db=null; }
+    try{ await loadAllData(); }
+    catch(e){ db=null; loadLocalFallback(); }
+  })();
+  await Promise.race([loadTask,new Promise(resolve=>setTimeout(resolve,4500))]);
+  if(!S.settings || !S.settings.id){
+    loadLocalFallback();
+    if(!S.settings || !S.settings.id) S.settings={id:'main',...defaultSettings()};
+  }
+  splashDataReady=true;
+  if(splashFinishRequested) finishSplash();
   if(S.clients.length===0 && S.settings._seeded!==true){
     // first run: offer demo data via prompt on dashboard; do not auto-seed silently more than once
   }
-  runSplash();
 }
 init();
 
