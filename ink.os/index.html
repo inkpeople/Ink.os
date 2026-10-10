@@ -3234,6 +3234,22 @@ function completeSessionForm(eventId){
     const after=fd.getAll('after');
     if(after.includes('Напоминание через неделю')) {}
     closeModal(); toast('Итоги сеанса сохранены'); computeAutoNotifications();
+    // Send tattoo aftercare instructions automatically after session completion.
+    if(client && (client.reminderConsent===true || String(client.reminderConsent).toLowerCase()==='true') && (client.reminderChannel||'telegram')==='telegram'){
+      const careMessage=(S.settings.careText||CARE_DEFAULT).replace(/\\{name\\}/g,(client.name||'').trim().split(/\\s+/)[0]||'').trim();
+      fetch('https://jgzzdsittnzomedvssppj.supabase.co/functions/v1/inkos-send-care',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','apikey':'sb_publishable_z40zmd4oAy9jUr3Q4BgDYQ_-IpiIlJe'},
+        body:JSON.stringify({eventId:String(e.id),clientId:String(client.id),message:careMessage})
+      }).then(async response=>{
+        const result=await response.json().catch(()=>({}));
+        if(response.ok && result.sent) toast('Инструкция по уходу отправлена клиенту в Telegram');
+        else if(result.duplicate) toast('Инструкция по уходу уже отправлялась по этому сеансу');
+        else { console.warn('Care instructions delivery failed:',result.error||response.status); toast('Сеанс завершён, но инструкция не отправлена: '+(result.error||'ошибка доставки')); }
+      }).catch(err=>{console.warn('Care instructions delivery failed:',err);toast('Сеанс завершён, но отправку инструкции проверить не удалось');});
+    } else if(client) {
+      toast('Сеанс завершён. Для автоотправки инструкции подключи согласованный Telegram клиента');
+    }
     if(currentRoute==='calendar') RENDERERS.calendar();
   };
 }
@@ -4741,7 +4757,7 @@ function generateAppIcon(){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
     const swUrl=new URL('sw.js',document.baseURI);
-    swUrl.searchParams.set('build','premium-20261010-v16-client-form-init-fix');
+    swUrl.searchParams.set('build','premium-20261010-v17-auto-care-telegram');
     navigator.serviceWorker.register(swUrl,{updateViaCache:'none'}).then(reg=>reg.update()).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
