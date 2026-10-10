@@ -10,7 +10,7 @@
     return d;
   }
   window.startVkLink=async function(id){
-    const c=S.clients.find(x=>x.id===id);
+    const c=(S.clients||[]).find(x=>String(x.id)===String(id));
     if(!c){toast('Клиент не найден');return;}
     if(!window.crypto||!crypto.getRandomValues){toast('Браузер не поддерживает генерацию кода');return;}
     const hex=n=>Array.from(crypto.getRandomValues(new Uint8Array(n))).map(b=>b.toString(16).padStart(2,'0')).join('').toUpperCase();
@@ -25,7 +25,7 @@
       await post({token,clientId:String(c.id),name:String(c.name||''),phone:String(c.phone||''),statusKey});
       c.vkLinkToken=token;c.vkLinkStatusKey=statusKey;c.reminderChannel='vk';
       await idbPut('clients',c);
-      const i=S.clients.findIndex(x=>x.id===c.id);if(i>=0)S.clients[i]=c;
+      const i=S.clients.findIndex(x=>String(x.id)===String(c.id));if(i>=0)S.clients[i]=c;
       if(status())status().textContent='Код создан. Жду, пока клиент отправит его в сообщения сообщества.';
     }catch(e){if(status())status().textContent='Ошибка создания кода: '+String(e.message||e);return;}
     const end=Date.now()+300000;
@@ -36,7 +36,7 @@
         if(d.status==='waiting_confirmation'){if(status())status().textContent='Код принят. Попросите клиента ответить «ДА».';}
         else if(d.status==='linked'){
           c.reminderConsent=true;c.reminderConsentAt=d.consentAt||new Date().toISOString();c.reminderConsentSource='vk_callback_confirmation';c.reminderChannel='vk';c.vkLinked=true;c.vkLinkToken='';
-          await idbPut('clients',c);const i=S.clients.findIndex(x=>x.id===c.id);if(i>=0)S.clients[i]=c;
+          await idbPut('clients',c);const i=S.clients.findIndex(x=>String(x.id)===String(c.id));if(i>=0)S.clients[i]=c;
           if(status())status().innerHTML='<b style="color:var(--green)">ВКонтакте подключён. Согласие подтверждено.</b>';
           toast('Клиент подключён к VK');return;
         }else if(status())status().textContent='Ожидаю код и подтверждение согласия клиента…';
