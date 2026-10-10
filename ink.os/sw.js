@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-premium-v17-client-save-fix';
+const CACHE_NAME = 'ink-os-shell-premium-v18-client-form-init-fix';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
