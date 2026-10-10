@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-premium-v22-vk-auto-bind';
+const CACHE_NAME = 'ink-os-shell-premium-v23-vk-existing-dialog';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
