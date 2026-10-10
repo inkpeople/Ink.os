@@ -1855,7 +1855,13 @@ function openClientForm(existing){
     </select>
     <label>Telegram Chat ID</label><input name="telegramChatId" value="${esc(c.telegramChatId||'')}" placeholder="Числовой ID чата, не @username">
     <label>VK Peer ID</label><input name="vkPeerId" value="${esc(c.vkPeerId||'')}" placeholder="Числовой peer_id диалога">
-    <p class="small dim" style="margin:8px 0 0">Напоминания отправляются за 24 часа и за 2 часа до записи, если серверное подключение и токен канала настроены.</p>
+    <div class="field-row" style="margin-top:10px">
+      <button type="button" class="btn btn-secondary" id="generateTelegramLink">Создать ссылку привязки Telegram</button>
+      <button type="button" class="btn btn-secondary" id="copyTelegramLink" disabled>Копировать ссылку</button>
+    </div>
+    <input type="text" id="telegramLinkPreview" readonly value="${c.telegramLinkToken?'https://t.me/Ramzestattoo_bot?start=link_'+esc(c.telegramLinkToken):''}" placeholder="Здесь появится персональная ссылка">
+    <input type="hidden" id="telegramLinkTokenField" name="telegramLinkToken" value="${esc(c.telegramLinkToken||'')}">
+    <p class="small dim" style="margin:8px 0 0">Создай ссылку, сохрани карточку и только после этого отправь её клиенту. Клиент сам подтвердит согласие в Telegram. Напоминания отправляются за 24 часа и за 2 часа до встречи.</p>
   </div>
   <label>Другая ссылка на профиль</label><input name="profileLink" value="${esc(c.profileLink)}">
   <div class="field-row">
@@ -1883,7 +1889,28 @@ function openClientForm(existing){
     <button type="submit" class="btn btn-primary">Сохранить</button>
   </div>
   </form>`);
-  $$('#quickNotesWrap .chip').forEach(ch=>ch.onclick=()=>ch.classList.toggle('active'));
+  $('#quickNotesWrap .chip').forEach(ch=>ch.onclick=()=>ch.classList.toggle('active'));
+  const tgTokenField=$('#telegramLinkTokenField'), tgPreview=$('#telegramLinkPreview');
+  const tgCopy=$('#copyTelegramLink'), tgGenerate=$('#generateTelegramLink');
+  if(tgGenerate && tgTokenField && tgPreview){
+    const refreshTelegramLink=()=>{
+      const token=String(tgTokenField.value||'').trim();
+      tgPreview.value=token?'https://t.me/Ramzestattoo_bot?start=link_'+token:'';
+      if(tgCopy) tgCopy.disabled=!token;
+    };
+    tgGenerate.onclick=()=>{
+      const bytes=new Uint8Array(24); crypto.getRandomValues(bytes);
+      tgTokenField.value=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+      refreshTelegramLink();
+      toast('Ссылка создана. Сохрани карточку перед отправкой клиенту.');
+    };
+    if(tgCopy) tgCopy.onclick=async()=>{
+      if(!tgPreview.value) return;
+      try{ await navigator.clipboard.writeText(tgPreview.value); toast('Ссылка скопирована'); }
+      catch(e){ tgPreview.focus(); tgPreview.select(); toast('Выдели ссылку и скопируй вручную'); }
+    };
+    refreshTelegramLink();
+  }
   $('#clientForm').onsubmit=async e=>{
     e.preventDefault();
     const fd=new FormData(e.target);
