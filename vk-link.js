@@ -10,7 +10,7 @@
     return d;
   }
   window.startVkLink=async function(id){
-    const c=window.S&&S.clients.find(x=>x.id===id);
+    const c=S.clients.find(x=>x.id===id);
     if(!c){toast('Клиент не найден');return;}
     if(!window.crypto||!crypto.getRandomValues){toast('Браузер не поддерживает генерацию кода');return;}
     const hex=n=>Array.from(crypto.getRandomValues(new Uint8Array(n))).map(b=>b.toString(16).padStart(2,'0')).join('').toUpperCase();
