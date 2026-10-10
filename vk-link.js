@@ -44,17 +44,34 @@
     }
     if(status())status().textContent='Пока нет подтверждения. Код можно использовать, пока вы не создадите новый.';
   };
+  let activeClientId=null;
+  function injectVkButton(){
+    if(!activeClientId)return;
+    const area=document.querySelector('#modalBody .cl-actions, .modal-body .cl-actions, .cl-actions');
+    if(!area||area.querySelector('[data-vk-link-button]'))return;
+    const b=document.createElement('button');
+    b.type='button';b.className='btn';b.dataset.vkLinkButton='1';
+    b.textContent='Подключить VK';
+    b.style.gridColumn='1 / -1';
+    b.onclick=()=>window.startVkLink(activeClientId);
+    area.appendChild(b);
+  }
   const original=window.openClient;
   if(typeof original==='function'){
     window.openClient=function(id,tab){
+      activeClientId=id;
       const result=original.apply(this,arguments);
-      setTimeout(()=>{
-        const area=document.querySelector('.cl-actions');
-        if(area&&!area.querySelector('[data-vk-link-button]')){
-          const b=document.createElement('button');b.className='btn';b.dataset.vkLinkButton='1';b.textContent='Подключить VK';b.onclick=()=>window.startVkLink(id);area.appendChild(b);
-        }
-      },0);
+      setTimeout(injectVkButton,0);
+      setTimeout(injectVkButton,100);
       return result;
     };
   }
+  // Also handle client cards rendered after this script initializes.
+  const observer=new MutationObserver(()=>injectVkButton());
+  function observeModal(){
+    const root=document.querySelector('#modalOverlay')||document.body;
+    observer.observe(root,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observeModal,{once:true});
+  else observeModal();
 })();
