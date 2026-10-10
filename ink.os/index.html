@@ -1989,7 +1989,7 @@ function openClientForm(existing){
     try{
       const response=await fetch('https://jgzzdsittnzomedvsspj.supabase.co/functions/v1/inkos-vk-existing-dialog',{
         method:'POST',headers:{'Content-Type':'application/json','apikey':'sb_publishable_z40zmd4oAy9jUr3Q4BgDYQ_-IpiIlJe'},
-        body:JSON.stringify({token}),signal:AbortSignal.timeout(18000)
+        body:JSON.stringify({token}),signal:AbortSignal.timeout(60000)
       });
       const result=await response.json().catch(()=>({}));
       if(!response.ok||result.ok!==true)throw new Error(result.error||('HTTP_'+response.status));
@@ -2002,7 +2002,7 @@ function openClientForm(existing){
       }else if(result.reason==='AMBIGUOUS_NAME'){
         toast('Нашлось несколько диалогов с таким именем. Для безопасности используй персональный код.');
       }else{
-        toast('Однозначный диалог не найден среди последних 200. Используй персональный код привязки.');
+        toast(result.limitReached?'В первых 5000 диалогах клиент не найден однозначно. Используй персональный код.':'Диалог не найден среди проверенных '+(result.checked||0)+' диалогов. Используй персональный код привязки.');
       }
     }catch(err){
       console.warn('VK existing dialog lookup failed:',err);
