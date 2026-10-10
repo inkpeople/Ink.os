@@ -3496,8 +3496,15 @@ function openStudentForm(existing){
     <p class="small dim" style="margin:0 0 8px">Ученик должен согласиться на сообщения и заранее написать боту или сообществу. Для отправки нужен числовой ID чата.</p>
     <label class="ck-row" style="display:flex;gap:10px;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="studentReminderConsent" ${s.reminderConsent===true||String(s.reminderConsent)==='true'?'checked':''}><span>Ученик согласен получать напоминания</span></label>
     <label>Канал</label><select name="reminderChannel"><option value="telegram" ${(s.reminderChannel||'telegram')==='telegram'?'selected':''}>Telegram</option><option value="vk" ${s.reminderChannel==='vk'?'selected':''}>ВКонтакте</option></select>
-    <label>Telegram Chat ID</label><input name="telegramChatId" value="${esc(s.telegramChatId||'')}" placeholder="Числовой ID чата">
+    <label>Telegram Chat ID</label><input name="telegramChatId" value="${esc(s.telegramChatId||'')}" placeholder="Заполнится после привязки">
     <label>VK Peer ID</label><input name="vkPeerId" value="${esc(s.vkPeerId||'')}" placeholder="Числовой peer_id диалога">
+    <div class="field-row" style="margin-top:10px">
+      <button type="button" class="btn btn-secondary" id="generateStudentTelegramLink">Создать ссылку привязки Telegram</button>
+      <button type="button" class="btn btn-secondary" id="copyStudentTelegramLink" disabled>Копировать ссылку</button>
+    </div>
+    <input type="text" id="studentTelegramLinkPreview" readonly value="${s.telegramLinkToken?'https://t.me/Ramzestattoo_bot?start=link_'+esc(s.telegramLinkToken):''}" placeholder="Здесь появится персональная ссылка">
+    <input type="hidden" id="studentTelegramLinkTokenField" name="telegramLinkToken" value="${esc(s.telegramLinkToken||'')}">
+    <p class="small dim" style="margin:8px 0 0">Создай ссылку, сохрани карточку ученика и только потом отправь её. Ученик должен открыть бота и подтвердить согласие.</p>
   </div>
   <label>Город</label><input name="city" value="${esc(s.city)}">
   <label>Дата начала</label><input type="date" name="startDate" value="${s.startDate}">
@@ -3509,9 +3516,33 @@ function openStudentForm(existing){
   <div class="field-row"><div><label>Сильные стороны</label><input name="strengths" value="${esc(s.strengths)}"></div><div><label>Слабые стороны</label><input name="weaknesses" value="${esc(s.weaknesses)}"></div></div>
   <div class="row" style="margin-top:14px">${existing?`<button type="button" class="btn btn-danger" onclick="deleteStudent('${s.id}')">Удалить</button>`:'<span></span>'}<button class="btn btn-primary" type="submit">Сохранить</button></div>
   </form>`);
+  const stTokenField=$('#studentTelegramLinkTokenField'), stPreview=$('#studentTelegramLinkPreview');
+  const stCopy=$('#copyStudentTelegramLink'), stGenerate=$('#generateStudentTelegramLink');
+  if(stGenerate && stTokenField && stPreview){
+    const refreshStudentTelegramLink=()=>{
+      const token=String(stTokenField.value||'').trim();
+      stPreview.value=token?'https://t.me/Ramzestattoo_bot?start=link_'+token:'';
+      if(stCopy) stCopy.disabled=!token;
+    };
+    stGenerate.onclick=()=>{
+      const bytes=new Uint8Array(24); crypto.getRandomValues(bytes);
+      stTokenField.value=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+      refreshStudentTelegramLink();
+      toast('Ссылка создана. Сохрани карточку ученика перед отправкой.');
+    };
+    if(stCopy) stCopy.onclick=async()=>{
+      if(!stPreview.value) return;
+      try{ await navigator.clipboard.writeText(stPreview.value); toast('Ссылка скопирована'); }
+      catch(e){ stPreview.focus(); stPreview.select(); toast('Выдели ссылку и скопируй вручную'); }
+    };
+    refreshStudentTelegramLink();
+  }
   $('#studentForm').onsubmit=async e=>{
     e.preventDefault(); const fd=new FormData(e.target); const obj={...s}; fd.forEach((v,k)=>obj[k]=v);
     obj.reminderConsent=$('#studentReminderConsent')?.checked===true;
+    obj.reminderChannel=String(obj.reminderChannel||'telegram').toLowerCase()==='vk'?'vk':'telegram';
+    obj.telegramChatId=String(obj.telegramChatId||'').trim();
+    obj.vkPeerId=String(obj.vkPeerId||'').trim();
     if(!obj.id) obj.id=uid();
     await idbPut('students',obj); const idx=S.students.findIndex(x=>x.id===obj.id); if(idx>=0) S.students[idx]=obj; else S.students.push(obj);
     closeModal(); toast('Ученик сохранён'); go('training');
