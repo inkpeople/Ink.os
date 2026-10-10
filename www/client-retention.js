@@ -96,6 +96,8 @@
     if((S.notifications||[]).some(function(n){return n.type==='retention-sent'&&n.refId===refId;})){toast('Это касание уже отмечено');return;}
     await idbPut('notifications',{id:uid(),type:'retention-sent',refId:refId,createdAt:Date.now(),title:'Касание клиенту выполнено'});
     S.notifications=await idbAll('notifications');
+    var taskText=(window._retentionMessageMap||{})[refId]||'Сообщение клиенту отмечено как отправленное.';
+    if(typeof addNotification==='function') addNotification('Отправка клиенту отмечена: '+taskText.slice(0,150),'followup','retention-confirm:'+refId);
     toast('Касание отмечено выполненным');
     RENDERERS.retention();
   };
