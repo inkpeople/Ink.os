@@ -1897,11 +1897,14 @@ function openClientForm(existing){
     <input type="text" id="telegramLinkPreview" readonly value="${c.telegramLinkToken?'https://t.me/Ramzestattoo_bot?start=link_'+esc(c.telegramLinkToken):''}" placeholder="Персональная ссылка Telegram">
     <input type="hidden" id="telegramLinkTokenField" name="telegramLinkToken" value="${esc(c.telegramLinkToken||'')}">
     <div class="field-row" style="margin-top:10px">
-      <button type="button" class="btn btn-secondary" id="generateVkLink">Создать ссылку ВКонтакте</button>
+      <button type="button" class="btn btn-secondary" id="generateVkLink">Создать привязку ВКонтакте</button>
       <button type="button" class="btn btn-secondary" id="copyVkLink" disabled>Копировать ссылку ВК</button>
+      <button type="button" class="btn btn-secondary" id="copyVkCode" disabled>Копировать код</button>
     </div>
     <input type="text" id="vkLinkPreview" readonly placeholder="Ссылка на диалог сообщества ВКонтакте">
-    <p class="small dim" style="margin:8px 0 0">Telegram-ссылка персональная. Ссылка ВК откроет диалог с сообществом; чтобы автоматические напоминания работали, клиент должен написать сообществу, а его VK Peer ID нужно связать с карточкой. Отправка возможна только при согласии клиента.</p>
+    <input type="text" id="vkLinkCodePreview" readonly placeholder="Персональный код для отправки в диалог">
+    <input type="hidden" id="vkLinkTokenField" name="vkLinkToken" value="${esc(c.vkLinkToken||'')}">
+    <p class="small dim" style="margin:8px 0 0">Отправь клиенту ссылку и код. Клиент должен написать код в диалог сообщества, затем подтвердить согласие ответом «ДА». После настройки Callback API VK Peer ID привяжется автоматически.</p>
   </div>
   <label>Другая ссылка на профиль</label><input name="profileLink" value="${esc(c.profileLink)}">
   <div class="field-row">
@@ -1964,14 +1967,40 @@ function openClientForm(existing){
     refreshTelegramLink();
   }
   const vkGenerate=$('#generateVkLink'), vkPreview=$('#vkLinkPreview'), vkCopy=$('#copyVkLink');
-  if(vkGenerate && vkPreview){
-    const refreshVkLink=()=>{ vkPreview.value='https://vk.me/blacktattoo54'; if(vkCopy) vkCopy.disabled=false; };
-    vkGenerate.onclick=()=>{ refreshVkLink(); vkPreview.focus(); toast('Ссылка на диалог ВКонтакте создана. Сохрани карточку и отправь ссылку клиенту.'); };
+  const vkCodePreview=$('#vkLinkCodePreview'), vkCodeCopy=$('#copyVkCode'), vkTokenField=$('#vkLinkTokenField');
+  if(vkGenerate && vkPreview && vkTokenField){
+    const refreshVkLink=()=>{
+      vkPreview.value='https://vk.me/blacktattoo54';
+      const token=String(vkTokenField.value||'').trim().toUpperCase();
+      if(vkCodePreview) vkCodePreview.value=token?'INK-'+token:'';
+      if(vkCopy) vkCopy.disabled=false;
+      if(vkCodeCopy) vkCodeCopy.disabled=!token;
+    };
+    vkGenerate.onclick=()=>{
+      try{
+        let token='';
+        if(window.crypto && typeof window.crypto.getRandomValues==='function'){
+          const bytes=new Uint8Array(6); window.crypto.getRandomValues(bytes);
+          token=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('').toUpperCase();
+        }else{
+          for(let i=0;i<12;i++) token+='0123456789ABCDEF'[Math.floor(Math.random()*16)];
+        }
+        vkTokenField.value=token;
+        refreshVkLink();
+        toast('Код создан. Сохрани карточку, затем отправь клиенту ссылку и код.');
+      }catch(err){toast('Не удалось создать код ВК');}
+    };
     if(vkCopy) vkCopy.onclick=async()=>{
       if(!vkPreview.value) refreshVkLink();
       try{ await navigator.clipboard.writeText(vkPreview.value); toast('Ссылка ВК скопирована'); }
       catch(e){ vkPreview.focus(); vkPreview.select(); toast('Выдели ссылку и скопируй вручную'); }
     };
+    if(vkCodeCopy) vkCodeCopy.onclick=async()=>{
+      if(!vkCodePreview?.value) return;
+      try{ await navigator.clipboard.writeText(vkCodePreview.value); toast('Код привязки ВК скопирован'); }
+      catch(e){ vkCodePreview.focus(); vkCodePreview.select(); toast('Выдели код и скопируй вручную'); }
+    };
+    refreshVkLink();
   }
   $('#clientForm').onsubmit=async e=>{
     e.preventDefault();
@@ -1996,6 +2025,18 @@ function openClientForm(existing){
     closeModal();
     toast('Клиент сохранён');
     if(currentRoute==='clients') go('clients');
+    const vkToken=String(obj.vkLinkToken||'').trim();
+    if(vkToken){
+      fetch('https://jgzzdsittnzomedvsspj.supabase.co/functions/v1/inkos-vk-link',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','apikey':'sb_publishable_z40zmd4oAy9jUr3Q4BgDYQ_-IpiIlJe'},
+        body:JSON.stringify({token:vkToken,clientId:String(obj.id),kind:'client',name:obj.name,phone:obj.phone||''})
+      }).then(async response=>{
+        const result=await response.json().catch(()=>({}));
+        if(response.ok&&result.ok===true) toast('Код ВК зарегистрирован. Клиент может отправить его сообществу.');
+        else {console.warn('VK link registration failed:',result.error||response.status);toast('Не удалось зарегистрировать код ВК. Проверь соединение и сохрани карточку ещё раз.');}
+      }).catch(err=>{console.warn('VK link registration failed:',err);toast('Не удалось зарегистрировать код ВК. Проверь соединение и сохрани карточку ещё раз.');});
+    }
     if(telegramToken){
       const registrationToast=()=>toast('Карточка сохранена, но ссылку Telegram не удалось зарегистрировать. Открой карточку и нажми «Сохранить» ещё раз.');
       try{
@@ -4774,7 +4815,7 @@ function generateAppIcon(){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
     const swUrl=new URL('sw.js',document.baseURI);
-    swUrl.searchParams.set('build','premium-20261010-v19-vk-link');
+    swUrl.searchParams.set('build','premium-20261010-v20-vk-auto-bind');
     navigator.serviceWorker.register(swUrl,{updateViaCache:'none'}).then(reg=>reg.update()).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
