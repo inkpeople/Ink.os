@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-premium-v23-vk-existing-dialog';
+const CACHE_NAME = 'ink-os-shell-premium-v24-vk-pagination';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
