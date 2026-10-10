@@ -1924,7 +1924,7 @@ function openClientForm(existing){
     <button type="submit" class="btn btn-primary">Сохранить</button>
   </div>
   </form>`);
-  $('#quickNotesWrap .chip').forEach(ch=>ch.onclick=()=>ch.classList.toggle('active'));
+  $$('#quickNotesWrap .chip').forEach(ch=>ch.onclick=()=>ch.classList.toggle('active'));
   const tgTokenField=$('#telegramLinkTokenField'), tgPreview=$('#telegramLinkPreview');
   const tgCopy=$('#copyTelegramLink'), tgGenerate=$('#generateTelegramLink');
   if(tgGenerate && tgTokenField && tgPreview){
@@ -4741,7 +4741,7 @@ function generateAppIcon(){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
     const swUrl=new URL('sw.js',document.baseURI);
-    swUrl.searchParams.set('build','premium-20261010-v15-client-form-init-fix');
+    swUrl.searchParams.set('build','premium-20261010-v16-client-form-init-fix');
     navigator.serviceWorker.register(swUrl,{updateViaCache:'none'}).then(reg=>reg.update()).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
