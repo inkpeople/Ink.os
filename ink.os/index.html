@@ -3464,6 +3464,14 @@ function openStudentForm(existing){
   <form id="studentForm">
   <label>Имя*</label><input required name="name" value="${esc(s.name)}">
   <div class="field-row"><div><label>Телефон</label><input name="phone" value="${esc(s.phone)}"></div><div><label>Instagram</label><input name="instagram" value="${esc(s.instagram)}"></div></div>
+  <div class="card" style="margin:10px 0;border-color:var(--line-red)">
+    <div style="font-weight:800;margin-bottom:4px">Уведомления об обучении</div>
+    <p class="small dim" style="margin:0 0 8px">Ученик должен согласиться на сообщения и заранее написать боту или сообществу. Для отправки нужен числовой ID чата.</p>
+    <label class="ck-row" style="display:flex;gap:10px;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="studentReminderConsent" ${s.reminderConsent===true||String(s.reminderConsent)==='true'?'checked':''}><span>Ученик согласен получать напоминания</span></label>
+    <label>Канал</label><select name="reminderChannel"><option value="telegram" ${(s.reminderChannel||'telegram')==='telegram'?'selected':''}>Telegram</option><option value="vk" ${s.reminderChannel==='vk'?'selected':''}>ВКонтакте</option></select>
+    <label>Telegram Chat ID</label><input name="telegramChatId" value="${esc(s.telegramChatId||'')}" placeholder="Числовой ID чата">
+    <label>VK Peer ID</label><input name="vkPeerId" value="${esc(s.vkPeerId||'')}" placeholder="Числовой peer_id диалога">
+  </div>
   <label>Город</label><input name="city" value="${esc(s.city)}">
   <label>Дата начала</label><input type="date" name="startDate" value="${s.startDate}">
   <label>Стоимость</label><input type="number" name="cost" value="${s.cost}">
@@ -3475,7 +3483,9 @@ function openStudentForm(existing){
   <div class="row" style="margin-top:14px">${existing?`<button type="button" class="btn btn-danger" onclick="deleteStudent('${s.id}')">Удалить</button>`:'<span></span>'}<button class="btn btn-primary" type="submit">Сохранить</button></div>
   </form>`);
   $('#studentForm').onsubmit=async e=>{
-    e.preventDefault(); const fd=new FormData(e.target); const obj={...s}; fd.forEach((v,k)=>obj[k]=v); if(!obj.id) obj.id=uid();
+    e.preventDefault(); const fd=new FormData(e.target); const obj={...s}; fd.forEach((v,k)=>obj[k]=v);
+    obj.reminderConsent=$('#studentReminderConsent')?.checked===true;
+    if(!obj.id) obj.id=uid();
     await idbPut('students',obj); const idx=S.students.findIndex(x=>x.id===obj.id); if(idx>=0) S.students[idx]=obj; else S.students.push(obj);
     closeModal(); toast('Ученик сохранён'); go('training');
   };
