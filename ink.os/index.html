@@ -855,6 +855,7 @@ async function authSignUp(email,password,displayName){
   return data;
 }
 async function authSignOut(){
+  await syncAccountNow();
   try{if(authSession?.access_token)await authRequest('/auth/v1/logout',{},authSession.access_token);}catch(e){}
   saveAuthSession(null);accountDataReady=false;
   location.reload();
@@ -864,7 +865,12 @@ function blankAccountSnapshot(){
   return stores;
 }
 function cloneSnapshot(stores){
-  const copy={};for(const name of STORES)copy[name]=Array.isArray(stores?.[name])?stores[name]:[];
+  const copy={};
+  for(const name of STORES){
+    const value=stores?.[name];
+    if(name==='settings')copy[name]=Array.isArray(value)?value:(value&&typeof value==='object'?[value]:[]);
+    else copy[name]=Array.isArray(value)?value:[];
+  }
   if(!copy.settings.length)copy.settings=[{id:'main',...defaultSettings()}];
   return copy;
 }
@@ -1706,7 +1712,7 @@ $('#skipSplash').onclick=finishSplash;
 /* ====================== PIN LOCK ====================== */
 let pinBuffer='';
 function afterSplash(){
-  if(!currentAuthUser){showAuthScreen();return;}
+  if(!currentAuthUser||!accountDataReady){showAuthScreen(currentAuthUser?'Не удалось загрузить личные данные. Проверьте интернет и войдите снова.':'');return;}
   if(S.settings.pin){
     showPinScreen('unlock');
   } else {
