@@ -4173,6 +4173,12 @@ function renderPhotoBody(tab){
       <div class="scroll-x">${Object.entries(PHOTO_PRESETS).map(([k,p])=>`<span class="chip" onclick="applyPreset('${k}')">${p.label}</span>`).join('')}</div>
       ${(S.settings.thresholds)?'':''}
       <p class="small dim" style="margin-top:8px;color:var(--yellow)">⚠️ Коррекция покраснения кожи — только визуальная (не медицинская оценка), не изменяет саму татуировку, оригинал всегда сохраняется отдельно.</p>
+      <div class="card" style="margin-top:12px;padding:12px;border-color:var(--line)">
+        <div style="font-weight:700;margin-bottom:5px">✦ INK.OS Vision — анализ фото</div>
+        <p class="small dim" style="margin:0 0 10px">ИИ определит, что изображено: татуировка, стиль, основные элементы, цвет, композиция и качество снимка. Это не медицинская оценка кожи.</p>
+        <button class="btn btn-primary btn-sm" id="photoAiAnalyzeBtn" onclick="analyzePhotoWithAI()">✦ Распознать фото с ИИ</button>
+        <div id="photoAiResult" class="small" style="margin-top:10px;white-space:pre-wrap"></div>
+      </div>
       <div class="row" style="margin-top:10px">
         <button class="btn btn-sm" onclick="resetEdit()">Сбросить</button>
         <button class="btn btn-primary btn-sm" onclick="savePhoto()">Сохранить (оригинал + обработанная копия)</button>
@@ -4292,6 +4298,49 @@ function loadImageToEditor(dataUrl){
   img.src=dataUrl;
 }
 function resetEdit(){ if(photoState.img) loadImageToEditor(photoState.file); }
+async function analyzePhotoWithAI(){
+  const result=$('#photoAiResult'), btn=$('#photoAiAnalyzeBtn');
+  const cfg=aiProviderConfig();
+  if(!photoState.file){if(result)result.textContent='Сначала сделай снимок или выбери фото.';return;}
+  if(!cfg.cloudEnabled||!cfg.openRouterKey){
+    if(result)result.textContent='Облачный ИИ выключен или не настроен. Открой раздел «ИИ-помощник» → «Настроить бесплатные ИИ», сохрани OpenRouter API key и включи облачный режим.';
+    return;
+  }
+  if(btn){btn.disabled=true;btn.textContent='ИИ изучает фото…';}
+  if(result)result.textContent='Анализирую изображение через OpenRouter.';
+  try{
+    const imageData=String(photoState.file);
+    const prompt='Проанализируй фотографию для тату-мастера. Отвечай по-русски и конкретно. Определи: 1) что изображено; 2) если видна татуировка — стиль, сюжет, объекты, цвета и композицию; 3) качество фото — свет, резкость, блики, кадрирование; 4) рекомендации для портфолио. Если это не татуировка, опиши видимый объект. Не додумывай невидимые детали. Не ставь диагнозы и не оценивай медицинское состояние кожи.';
+    const models=['qwen/qwen2.5-vl-32b-instruct:free','google/gemma-3-27b-it:free'];
+    let answer='', used='';
+    const failures=[];
+    for(const model of models){
+      try{
+        const response=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.openRouterKey,'HTTP-Referer':location.origin,'X-Title':'INK.OS Vision'},
+          body:JSON.stringify({model,messages:[{role:'user',content:[
+            {type:'text',text:prompt},
+            {type:'image_url',image_url:{url:imageData}}
+          ]}],temperature:0.2,max_tokens:700})
+        });
+        const data=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error('HTTP '+response.status+(data.error&&data.error.message?': '+data.error.message:''));
+        answer=String(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content||'').trim();
+        if(!answer)throw new Error('Модель не вернула описание');
+        used=model;
+        break;
+      }catch(err){failures.push(model+': '+String(err.message||err));}
+    }
+    if(!answer)throw new Error('Модели распознавания недоступны. '+failures.join(' | '));
+    if(result)result.textContent=answer+'\n\nМодель: '+used;
+  }catch(err){
+    console.error('INK.OS Vision error',err);
+    if(result)result.textContent='Не удалось распознать фото: '+String(err.message||err)+'\nПроверь OpenRouter API key, интернет и доступность бесплатных vision-моделей.';
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='✦ Распознать фото с ИИ';}
+  }
+}
 function applyPreset(key){
   const p=PHOTO_PRESETS[key];
   if($('#rBrightness')) $('#rBrightness').value=(p.brightness||1)*100;
