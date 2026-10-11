@@ -2915,7 +2915,12 @@ function incomeOf(f){ return f.type==='income'; }
 RENDERERS.analytics=function(){
   const now=new Date(), ym=now.toISOString().slice(0,7), rate=Number(S.settings.taxRate||0), goal=Number(S.settings.monthGoal||0);
   const fin=S.finance||[]; const sum=(arr)=>arr.reduce((a,f)=>a+Number(f.amount||0),0);
-  const mInc=sum(fin.filter(f=>incomeOf(f)&&(f.date||'').startsWith(ym))), mExp=sum(fin.filter(f=>!incomeOf(f)&&(f.date||'').startsWith(ym)));
+  const yearKey=String(now.getFullYear());
+  const mInc=sum(fin.filter(f=>f.type==='income'&&(f.date||'').startsWith(ym))), mExp=sum(fin.filter(f=>f.type==='expense'&&(f.date||'').startsWith(ym)));
+  const yInc=sum(fin.filter(f=>f.type==='income'&&(f.date||'').startsWith(yearKey))), yExp=sum(fin.filter(f=>f.type==='expense'&&(f.date||'').startsWith(yearKey)));
+  const monthDone=S.events.filter(e=>e.status==='completed'&&(e.date||'').startsWith(ym)&&Number(e.cost||0)>0);
+  const avgCheck=monthDone.length?Math.round(monthDone.reduce((a,e)=>a+Number(e.cost||0),0)/monthDone.length):0;
+  const remaining=goal>0?Math.max(0,goal-mInc):null;
   const tax=mInc*rate/100, net=mInc-mExp-tax, pct=goal?Math.min(100,Math.round(mInc/goal*100)):0;
   const from=new Date(now.getFullYear(),now.getMonth()-(anMonths-1),1).toISOString().slice(0,10);
   const months=[]; for(let i=anMonths-1;i>=0;i--){ const d=new Date(now.getFullYear(),now.getMonth()-i,1); const k=d.toISOString().slice(0,7); months.push({k,l:MON[d.getMonth()],v:sum(fin.filter(f=>incomeOf(f)&&(f.date||'').startsWith(k)))}); }
@@ -2930,10 +2935,19 @@ RENDERERS.analytics=function(){
   const wd=[0,0,0,0,0,0,0]; done.forEach(e=>{ wd[(new Date(e.date+'T00:00').getDay()+6)%7]++; });
   const WD=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
   $('#content').innerHTML=`
-  <div class="cl-card"><div class="cl-lbl">Налоги и цель — ${MON[now.getMonth()]} ${now.getFullYear()}</div>
-    <div class="an-big">${fmtMoney(mInc)}</div><div class="small dim">доход за месяц · расходы ${fmtMoney(mExp)}</div>
-    <div class="ev-sum" style="margin-top:8px"><div class="r"><span>Отложить на налог (${rate}%)</span><b>${fmtMoney(tax)}</b></div><div class="r"><span>Чистыми после расходов и налога</span><b>${fmtMoney(net)}</b></div></div>
-    ${goal?`<div class="cl-lbl" style="margin-top:10px">Цель ${fmtMoney(goal)} — ${pct}%</div><div class="pj-bar"><div style="width:${pct}%"></div></div><div class="small dim" style="margin-top:6px">${mInc>=goal?'Цель выполнена 🎯':'Осталось '+fmtMoney(goal-mInc)}</div>`:''}
+  <div class="cl-card an-hero">
+    <div class="cl-lbl">Финансы · ${MON[now.getMonth()]} ${now.getFullYear()}</div>
+    <div class="an-big">${fmtMoney(mInc)}</div><div class="small dim">Фактически получено за месяц по внесённым доходам</div>
+    <div class="an-metric-grid">
+      <div class="an-metric"><span>Рабочие расходы</span><b>${fmtMoney(mExp)}</b></div>
+      <div class="an-metric"><span>Чистыми до налога</span><b>${fmtMoney(mInc-mExp)}</b></div>
+      <div class="an-metric"><span>Заработано за год</span><b>${fmtMoney(yInc)}</b></div>
+      <div class="an-metric"><span>Расходы за год</span><b>${fmtMoney(yExp)}</b></div>
+      <div class="an-metric"><span>Средний чек</span><b>${avgCheck?fmtMoney(avgCheck):'Недостаточно данных'}</b><small>${monthDone.length} завершённых сеансов с указанной ценой</small></div>
+      <div class="an-metric"><span>До цели месяца</span><b>${goal? (remaining>0?fmtMoney(remaining):'Цель выполнена'):'Цель не задана'}</b><small>${goal?'Цель: '+fmtMoney(goal):'Укажи цель ниже для расчёта'}</small></div>
+    </div>
+    <div class="ev-sum" style="margin-top:10px"><div class="r"><span>Отложить на налог (${rate}%)</span><b>${fmtMoney(tax)}</b></div><div class="r"><span>Чистыми после расходов и расчётного налога</span><b>${fmtMoney(net)}</b></div></div>
+    ${goal?`<div class="cl-lbl" style="margin-top:10px">Выполнение цели · ${pct}%</div><div class="pj-bar"><div style="width:${pct}%"></div></div><div class="small dim" style="margin-top:6px">${mInc>=goal?'Цель выполнена 🎯':'Осталось заработать '+fmtMoney(remaining)}</div>`:''}
     <div class="field-row" style="margin-top:10px"><div><label>Налог, %</label><input type="number" id="anRate" min="0" max="100" step="0.5" value="${rate}"></div><div><label>Цель на месяц</label><input type="number" id="anGoal" min="0" value="${goal||''}"></div></div>
     <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm btn-primary" id="anSave">Сохранить</button><button class="btn btn-sm" onclick="exportAccountant('month')">CSV за месяц</button><button class="btn btn-sm" onclick="exportAccountant('year')">CSV за год</button></div></div>
   <div class="segmented" style="margin-bottom:12px">${[3,6,12].map(n=>`<button class="${anMonths===n?'active':''}" data-m="${n}">${n} мес.</button>`).join('')}</div>
@@ -3748,10 +3762,21 @@ function deleteFinance(id){
 const TRAINING_PROGRAMS=['Базовое обучение','Индивидуальное наставничество','Постановка руки','Композиция','Стили','Фотографирование','Продвижение','Личный бренд','Работа с клиентами','Бизнес'];
 const HOMEWORK_STATUSES=['Создано','Отправлено','Просмотрено','В работе','На проверке','Принято','Требуется исправление','Просрочено','Отменено'];
 RENDERERS.training=function(){
+  const activeStudents=S.students.filter(s=>!s.status||!['Завершено','Архив'].includes(s.status)).length;
+  const trainingRevenue=(S.payments||[]).filter(p=>p.studentId).reduce((a,p)=>a+Number(p.amount||0),0);
+  const openHomework=S.homework.filter(h=>!['Принято','Отменено'].includes(h.status)).length;
   $('#content').innerHTML=`
-  <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Менторство</h2>
-    <button class="btn btn-primary btn-sm" onclick="openStudentForm()">+ Ученик</button></div>
-  <div class="tabbar" id="trainTabs">
+  <section class="training-premium-hero">
+    <div class="training-kicker">INK.OS · EDUCATION</div>
+    <div class="training-hero-row"><div><h2>Академия мастера</h2><p>Обучение, практика и рост навыков — в одном пространстве.</p></div><div class="training-emblem">✦</div></div>
+    <button class="btn btn-primary btn-sm" onclick="openStudentForm()">＋ Добавить ученика</button>
+  </section>
+  <div class="training-overview">
+    <div class="training-overview-card"><span>Ученики</span><b>${activeStudents}</b><small>активных профилей</small></div>
+    <div class="training-overview-card"><span>Оплачено</span><b>${fmtMoney(trainingRevenue)}</b><small>по платежам учеников</small></div>
+    <div class="training-overview-card"><span>В работе</span><b>${openHomework}</b><small>заданий не закрыто</small></div>
+  </div>
+  <div class="tabbar training-premium-tabs" id="trainTabs">
     <button data-t="students" class="active">Ученики</button>
     <button data-t="homework">Домашние задания</button>
   </div>
@@ -3768,7 +3793,7 @@ function renderTrainBody(tab){
       const hwDone=hw.filter(h=>h.status==='Принято').length;
       const pct=hw.length? Math.round(hwDone/hw.length*100) : 0;
       const initials=(s.name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
-      return `<div class="card" style="margin-bottom:8px;cursor:pointer" onclick="openStudent('${s.id}')">
+      return `<div class="card training-student-card" style="margin-bottom:10px;cursor:pointer" onclick="openStudent('${s.id}')">
         <div class="row" style="align-items:center;gap:10px">
           <div class="avatar-circle sm">${esc(initials)}</div>
           <div style="flex:1;min-width:0">
@@ -5979,6 +6004,29 @@ tr:hover{background:rgba(180,154,106,.045)}
  .btn{max-width:100%}
  .inv-redesign-bottom{flex-wrap:wrap}
 }
-</style>
+<style>
+/* Premium academy + clearer financial truth */
+.an-hero{background:linear-gradient(145deg,rgba(198,163,98,.10),rgba(18,18,20,.96) 58%);border-color:rgba(198,163,98,.34)!important}
+.an-metric-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:14px}
+.an-metric{min-width:0;padding:12px;border:1px solid rgba(198,163,98,.2);border-radius:13px;background:rgba(255,255,255,.025)}
+.an-metric span,.an-metric small{display:block;color:var(--muted,#999);font-size:11px;line-height:1.45}
+.an-metric b{display:block;margin-top:5px;font-size:15px;overflow-wrap:anywhere;color:var(--text,#f3f0e8)}
+.an-metric small{margin-top:4px;font-size:10px}
+.training-premium-hero{position:relative;overflow:hidden;margin:0 0 13px;padding:22px;border:1px solid rgba(198,163,98,.36);border-radius:20px;background:radial-gradient(ellipse at 90% 5%,rgba(198,163,98,.18),transparent 42%),linear-gradient(145deg,#20201f,#111112 72%);box-shadow:0 12px 32px rgba(0,0,0,.18)}
+.training-kicker{font-size:10px;letter-spacing:.22em;font-weight:800;color:#c9aa70;margin-bottom:10px}
+.training-hero-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.training-hero-row h2{font-size:24px;letter-spacing:-.04em;margin:0;color:#f4eee2}
+.training-hero-row p{max-width:270px;font-size:12px;line-height:1.6;color:#aaa49a;margin:8px 0 16px}
+.training-emblem{flex:0 0 52px;width:52px;height:52px;border:1px solid rgba(201,170,112,.55);border-radius:16px;display:grid;place-items:center;color:#d8bd86;font-size:26px;background:rgba(201,170,112,.08)}
+.training-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.training-overview-card{min-width:0;padding:12px 10px;border-radius:15px;border:1px solid var(--line,rgba(255,255,255,.1));background:linear-gradient(150deg,rgba(255,255,255,.045),rgba(255,255,255,.015))}
+.training-overview-card span,.training-overview-card small{display:block;color:var(--muted,#999);font-size:10px;line-height:1.4}
+.training-overview-card b{display:block;margin:6px 0;font-size:15px;overflow-wrap:anywhere;color:var(--text,#f3f0e8)}
+.training-premium-tabs{padding:4px;border:1px solid rgba(198,163,98,.2);border-radius:14px;background:rgba(255,255,255,.025);margin-bottom:12px}
+.training-premium-tabs button{border-radius:10px}
+.training-student-card{border-color:rgba(198,163,98,.16)!important;background:linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.012))!important;transition:border-color .2s,transform .2s}
+.training-student-card:active{transform:scale(.99);border-color:rgba(198,163,98,.5)!important}
+@media(max-width:390px){.training-overview{gap:6px}.training-overview-card{padding:10px 7px}.training-overview-card b{font-size:13px}.training-premium-hero{padding:18px}.training-hero-row h2{font-size:21px}.an-metric{padding:10px}.an-metric b{font-size:13px}}
+</style></style>
 </body>
 </html>
