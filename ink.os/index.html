@@ -2165,7 +2165,7 @@ window.startTelegramLink = async function(id){
     console.error('Telegram linking failed:',err);
     const msg=String(err&&err.message||err||'неизвестная ошибка');
     const body=document.querySelector('#modalBody');
-    if(body)body.innerHTML='<div class="cl-top"><span class="cl-ttl">Telegram не подключён</span><button class="cl-ib" onclick="closeModal()">✕</button></div><p class="small">Не удалось зарегистрировать ссылку. Причина: <b>'+esc(msg)+'</b></p><p class="small dim">Проверь интернет и нажми «Подключить Telegram» ещё раз.</p><button class="btn btn-primary" onclick="closeModal();window.startTelegramLink(\''+String(id).replace(/'/g,'\\\\\\'')+'\')">Повторить</button>';
+    if(body)body.innerHTML='<div class="cl-top"><span class="cl-ttl">Telegram не подключён</span><button class="cl-ib" onclick="closeModal()">✕</button></div><p class="small">Не удалось зарегистрировать ссылку. Причина: <b>'+esc(msg)+'</b></p><p class="small dim">Проверь интернет и нажми «Подключить Telegram» ещё раз.</p><button class="btn btn-primary" data-id="'+esc(String(id))+'" onclick="closeModal();window.startTelegramLink(this.dataset.id)">Повторить</button>';
   }
 };
 function openClient(id,tab){
