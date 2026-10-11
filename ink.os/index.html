@@ -4327,7 +4327,7 @@ async function analyzeCameraFrameWithAI(frameData,m){
         answer=String(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content||'').trim();if(answer)break;
       }catch(e){console.warn('INK.OS Photo Coach model failed',model,e);}
     }
-    if(answer){const advice=$('#camAIAdvice');if(advice)advice.innerHTML='<b>Совет ИИ:</b> '+esc(answer).replace(/\n/g,'<br>');if(status)status.textContent='ИИ обновил рекомендации. Следующая проверка примерно через 7 секунд.';}
+    if(answer){photoCoachState.lastAdvice=answer;const advice=$('#camAIAdvice');if(advice)advice.innerHTML='<b>Совет ИИ:</b> '+esc(answer).replace(/\n/g,'<br>');if(status)status.textContent='ИИ обновил рекомендации. Следующая проверка примерно через 7 секунд.';}
     else if(status)status.textContent='ИИ-модели сейчас не ответили. Локальные измерения продолжают работать.';
   }catch(e){console.warn('INK.OS Photo Coach error',e);if(status)status.textContent='Не удалось получить совет ИИ. Проверь интернет и настройки OpenRouter.';}
   finally{photoCoachState.busy=false;}
