@@ -682,9 +682,50 @@ table{border-collapse:separate!important;border-spacing:0!important;font-size:12
  .ai-chat-meta small{display:none}
 }
 
+
+/* Account registration and per-user workspace */
+.auth-screen{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:18px;background:radial-gradient(ellipse at top,rgba(198,43,40,.18),transparent 55%),#090807;overflow:auto}
+.auth-screen.open{display:flex}
+.auth-card{width:min(100%,430px);padding:26px;background:linear-gradient(160deg,#1a1514,#0e0c0b);border:1px solid #4a1614;border-radius:20px;box-shadow:0 20px 70px #000b,0 0 26px rgba(198,43,40,.12)}
+.auth-brand{font-weight:950;font-size:28px;letter-spacing:1px;text-align:center;color:#f3e8e4}
+.auth-brand b{color:#e5453f}
+.auth-subtitle{text-align:center;color:#a89e98;font-size:12px;margin:8px 0 22px;line-height:1.55}
+.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:4px;background:#0b0909;border:1px solid #2a2523;border-radius:12px;margin-bottom:16px}
+.auth-tabs button{border:0;background:transparent;color:#a89e98;padding:10px 6px;border-radius:8px;font-weight:700;font-size:12px}
+.auth-tabs button.active{background:#291312;color:#fff;border:1px solid #7a211d}
+.auth-card label{margin-top:12px}
+.auth-card .btn{margin-top:16px;height:44px}
+.auth-msg{font-size:12px;line-height:1.5;margin-top:12px;color:#a89e98;min-height:18px;overflow-wrap:anywhere}
+.auth-msg.error{color:#ff817b}.auth-msg.success{color:#69db9a}
+.auth-note{font-size:10px;line-height:1.5;color:#756a64;margin-top:16px;text-align:center}
+#authAccountBtn{max-width:180px;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:520px){.auth-card{padding:22px 18px}.auth-brand{font-size:25px}#authAccountBtn{display:none}}
+
 </style>
 </head>
 <body>
+
+<div id="authScreen" class="auth-screen" role="dialog" aria-modal="true" aria-label="Регистрация INK.OS">
+  <div class="auth-card">
+    <div class="auth-brand">INK<b>.OS</b></div>
+    <div class="auth-subtitle">Личный кабинет тату-мастера<br>Ваши клиенты, записи, склад и финансы — только в вашем аккаунте.</div>
+    <div class="auth-tabs">
+      <button type="button" id="authTabLogin" class="active">Войти</button>
+      <button type="button" id="authTabSignup">Регистрация</button>
+    </div>
+    <form id="authForm">
+      <div id="authNameWrap" class="hidden"><label for="authName">Имя мастера</label><input id="authName" type="text" autocomplete="name" maxlength="80" placeholder="Как к вам обращаться"></div>
+      <label for="authEmail">Электронная почта</label>
+      <input id="authEmail" type="email" autocomplete="email" required maxlength="254" placeholder="you@example.com">
+      <label for="authPassword">Пароль</label>
+      <input id="authPassword" type="password" autocomplete="current-password" required minlength="8" maxlength="128" placeholder="Не менее 8 символов">
+      <button class="btn btn-primary btn-block" id="authSubmit" type="submit">Войти в аккаунт</button>
+    </form>
+    <button class="btn btn-block" id="authForgot" type="button" style="margin-top:8px">Забыли пароль?</button>
+    <div id="authMessage" class="auth-msg" role="status" aria-live="polite"></div>
+    <div class="auth-note">Данные аккаунтов разделены на сервере политиками безопасности. Не используйте один аккаунт совместно с другими мастерами.</div>
+  </div>
+</div>
 
 <div id="splash">
   <div class="sp-col">
@@ -707,7 +748,9 @@ table{border-collapse:separate!important;border-spacing:0!important;font-size:12
 <div id="app" class="hidden">
   <div id="topbar">
     <div class="brand" onclick="go('dashboard')" style="cursor:pointer"><span class="logo">INK<b>.OS</b></span><span class="studio-tier">TATTOO STUDIO · PREMIUM</span><span id="topbarSub"></span></div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <span id="accountSyncState" class="small dim" style="align-self:center;font-size:10px"></span>
+      <button class="btn btn-sm" id="authAccountBtn" type="button" title="Нажмите, чтобы выйти из аккаунта">Аккаунт</button>
       <button class="bell-btn" id="searchBtn" aria-label="Поиск">
         <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg>
       </button>
@@ -738,6 +781,230 @@ table{border-collapse:separate!important;border-spacing:0!important;font-size:12
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script>
+
+/* ====================== ACCOUNT AUTH / CLOUD DATA ====================== */
+const INKOS_SUPABASE_URL='https://jgzzdsittnzomedvsspj.supabase.co';
+const INKOS_SUPABASE_KEY='sb_publishable_z40zmd4oAy9jUr3Q4BgDYQ_-IpiIlJe';
+const INKOS_AUTH_KEY='inkos_auth_session_v1';
+let authSession=null, currentAuthUser=null, accountDataReady=false, cloudSyncPaused=false, cloudSyncTimer=null;
+let authMode='login', authBusy=false;
+function authMessage(message,kind=''){
+  const el=document.getElementById('authMessage'); if(!el)return;
+  el.textContent=message||''; el.className='auth-msg'+(kind?' '+kind:'');
+}
+function authScreen(show){
+  const el=document.getElementById('authScreen'); if(!el)return;
+  el.classList.toggle('open',!!show);
+  if(show){document.getElementById('authEmail')?.focus();}
+}
+function authSetMode(mode){
+  authMode=mode==='signup'?'signup':'login';
+  document.getElementById('authTabLogin')?.classList.toggle('active',authMode==='login');
+  document.getElementById('authTabSignup')?.classList.toggle('active',authMode==='signup');
+  document.getElementById('authNameWrap')?.classList.toggle('hidden',authMode!=='signup');
+  const pass=document.getElementById('authPassword');
+  if(pass) pass.autocomplete=authMode==='signup'?'new-password':'current-password';
+  const submit=document.getElementById('authSubmit');
+  if(submit) submit.textContent=authMode==='signup'?'Создать аккаунт':'Войти в аккаунт';
+  const forgot=document.getElementById('authForgot');
+  if(forgot) forgot.classList.toggle('hidden',authMode!=='login');
+  authMessage('');
+}
+function authFriendlyError(err){
+  const msg=String(err?.message||err?.error_description||err?.msg||err||'Неизвестная ошибка');
+  if(/invalid login credentials/i.test(msg))return 'Неверная почта или пароль.';
+  if(/email not confirmed/i.test(msg))return 'Подтвердите почту по ссылке из письма, затем войдите.';
+  if(/user already registered/i.test(msg))return 'Аккаунт с такой почтой уже существует. Переключитесь на «Войти».';
+  if(/password.*(characters|short|least)/i.test(msg))return 'Пароль должен содержать не менее 8 символов.';
+  if(/rate limit/i.test(msg))return 'Слишком много попыток. Подождите и попробуйте ещё раз.';
+  return msg.slice(0,240);
+}
+async function authRequest(path,body,token){
+  const headers={'Content-Type':'application/json','apikey':INKOS_SUPABASE_KEY};
+  if(token)headers.Authorization='Bearer '+token;
+  const response=await fetch(INKOS_SUPABASE_URL+path,{method:'POST',headers,body:JSON.stringify(body)});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(data.msg||data.message||data.error_description||data.error||('HTTP '+response.status));
+  return data;
+}
+function saveAuthSession(session){
+  authSession=session||null;
+  try{if(session)localStorage.setItem(INKOS_AUTH_KEY,JSON.stringify(session));else localStorage.removeItem(INKOS_AUTH_KEY);}catch(e){}
+  currentAuthUser=session?.user||null;
+  const label=document.getElementById('authAccountBtn');
+  if(label){label.textContent=currentAuthUser?.email||'Аккаунт';label.title=currentAuthUser?.email||'';}
+}
+async function restoreAuthSession(){
+  let saved=null;try{saved=JSON.parse(localStorage.getItem(INKOS_AUTH_KEY)||'null');}catch(e){}
+  if(!saved?.refresh_token){saveAuthSession(null);return false;}
+  try{
+    if(saved.expires_at && saved.expires_at>Date.now()/1000+60){saveAuthSession(saved);return !!currentAuthUser;}
+    const data=await authRequest('/auth/v1/token?grant_type=refresh_token',{refresh_token:saved.refresh_token});
+    saveAuthSession({...data,expires_at:Date.now()/1000+Number(data.expires_in||3600)});
+    return !!currentAuthUser;
+  }catch(e){saveAuthSession(null);return false;}
+}
+async function authPasswordSignIn(email,password){
+  const data=await authRequest('/auth/v1/token?grant_type=password',{email,password});
+  if(!data.access_token||!data.user)throw new Error('Сервер не вернул сессию. Проверьте подтверждение почты.');
+  saveAuthSession({...data,expires_at:Date.now()/1000+Number(data.expires_in||3600)});
+}
+async function authSignUp(email,password,displayName){
+  const data=await authRequest('/auth/v1/signup',{email,password,data:{display_name:displayName||email.split('@')[0]}});
+  if(data.access_token&&data.user)saveAuthSession({...data,expires_at:Date.now()/1000+Number(data.expires_in||3600)});
+  return data;
+}
+async function authSignOut(){
+  try{if(authSession?.access_token)await authRequest('/auth/v1/logout',{},authSession.access_token);}catch(e){}
+  saveAuthSession(null);accountDataReady=false;
+  location.reload();
+}
+function blankAccountSnapshot(){
+  const stores={};for(const name of STORES)stores[name]=name==='settings'?[{id:'main',...defaultSettings()}]:[];
+  return stores;
+}
+function cloneSnapshot(stores){
+  const copy={};for(const name of STORES)copy[name]=Array.isArray(stores?.[name])?stores[name]:[];
+  if(!copy.settings.length)copy.settings=[{id:'main',...defaultSettings()}];
+  return copy;
+}
+async function readLocalSnapshot(){
+  if(!db){loadLocalFallback();const out={};for(const name of STORES)out[name]=name==='settings'?(S.settings?.id?[S.settings]:[]):(Array.isArray(S[name])?JSON.parse(JSON.stringify(S[name])):[]);return out;}
+  const out={};for(const name of STORES)out[name]=await idbAll(name);
+  return out;
+}
+function snapshotHasUserData(stores){
+  return STORES.some(name=>name!=='settings'&&name!=='notifications'&&name!=='backups'&&Array.isArray(stores[name])&&stores[name].length>0);
+}
+function applySnapshotToMemory(stores){
+  for(const name of STORES){
+    if(name==='settings')S.settings=(stores.settings&&stores.settings[0])?stores.settings[0]:{id:'main',...defaultSettings()};
+    else S[name]=Array.isArray(stores[name])?stores[name]:[];
+  }
+}
+async function writeSnapshotToLocal(stores){
+  const safe=cloneSnapshot(stores);
+  cloudSyncPaused=true;
+  try{
+    if(db){
+      for(const name of STORES){
+        await new Promise((resolve,reject)=>{
+          const tx=db.transaction(name,'readwrite'), os=tx.objectStore(name);
+          os.clear();
+          (safe[name]||[]).forEach(item=>os.put(item));
+          tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Не удалось обновить локальную базу'));
+        });
+      }
+    }else{
+      applySnapshotToMemory(safe);persistLocalFallback();
+    }
+    applySnapshotToMemory(safe);
+  }finally{cloudSyncPaused=false;}
+}
+async function cloudFetchOwnData(){
+  if(!authSession?.access_token||!currentAuthUser?.id)throw new Error('Сессия аккаунта истекла. Войдите снова.');
+  const url=INKOS_SUPABASE_URL+'/rest/v1/inkos_user_data?select=data&user_id=eq.'+encodeURIComponent(currentAuthUser.id);
+  const response=await fetch(url,{headers:{apikey:INKOS_SUPABASE_KEY,Authorization:'Bearer '+authSession.access_token}});
+  if(!response.ok)throw new Error('Не удалось загрузить данные аккаунта (HTTP '+response.status+'). Проверьте подключение и права доступа.');
+  const rows=await response.json();
+  return rows?.[0]?.data||null;
+}
+async function cloudWriteSnapshot(stores){
+  if(!accountDataReady||cloudSyncPaused||!authSession?.access_token||!currentAuthUser?.id)return;
+  const payload={user_id:currentAuthUser.id,data:{schemaVersion:1,stores:cloneSnapshot(stores)},updated_at:new Date().toISOString()};
+  const response=await fetch(INKOS_SUPABASE_URL+'/rest/v1/inkos_user_data?on_conflict=user_id',{
+    method:'POST',headers:{apikey:INKOS_SUPABASE_KEY,Authorization:'Bearer '+authSession.access_token,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+    body:JSON.stringify(payload)
+  });
+  if(!response.ok){const detail=await response.text().catch(()=> '');throw new Error('Не удалось сохранить данные в облако (HTTP '+response.status+'). '+detail.slice(0,160));}
+}
+async function syncAccountNow(){
+  if(!accountDataReady||cloudSyncPaused||!currentAuthUser)return;
+  try{const snapshot=await readLocalSnapshot();await cloudWriteSnapshot(snapshot);const el=document.getElementById('accountSyncState');if(el)el.textContent='Синхронизировано';}
+  catch(e){console.error('INK.OS cloud sync:',e);const el=document.getElementById('accountSyncState');if(el)el.textContent='Нет синхронизации';}
+}
+function scheduleCloudSync(){
+  if(!accountDataReady||cloudSyncPaused||!currentAuthUser)return;
+  clearTimeout(cloudSyncTimer);
+  cloudSyncTimer=setTimeout(()=>syncAccountNow(),1200);
+}
+async function loadAccountData(){
+  if(!currentAuthUser||!authSession?.access_token)throw new Error('Сначала войдите в аккаунт.');
+  try{db=await idbOpen();}catch(e){db=null;}
+  let localSnapshot=await readLocalSnapshot();
+  let cloudData=await cloudFetchOwnData();
+  if(cloudData&&cloudData.stores){
+    const cloudSnapshot=cloneSnapshot(cloudData.stores);
+    await writeSnapshotToLocal(cloudSnapshot);
+  }else{
+    const hasLocal=snapshotHasUserData(localSnapshot);
+    let importLocal=false;
+    if(hasLocal){
+      importLocal=confirm('В этом аккаунте пока нет сохранённых данных. На этом устройстве найдены локальные записи. Перенести их в этот аккаунт?\n\nНажмите «ОК» только если это данные именно этого мастера. Нажмите «Отмена», чтобы начать с чистого аккаунта.');
+    }
+    if(importLocal){
+      localSnapshot=cloneSnapshot(localSnapshot);await writeSnapshotToLocal(localSnapshot);
+    }else{
+      await writeSnapshotToLocal(blankAccountSnapshot());
+    }
+    accountDataReady=true;
+    await syncAccountNow();
+    return;
+  }
+  accountDataReady=true;
+  await syncAccountNow();
+}
+function showAuthScreen(message='',kind=''){
+  authScreen(true);authSetMode('login');if(message)authMessage(message,kind);
+}
+async function finishAuthLogin(){
+  authMessage('Загружаю личные данные из защищённого хранилища…');
+  try{
+    await loadAccountData();
+    authScreen(false);
+    const app=document.getElementById('app');if(app)app.classList.remove('hidden');
+    if(!appBooted)bootApp();
+  }catch(e){
+    accountDataReady=false;
+    showAuthScreen('Не удалось открыть аккаунт: '+authFriendlyError(e),'error');
+  }
+}
+function bindAuthUI(){
+  document.getElementById('authTabLogin')?.addEventListener('click',()=>authSetMode('login'));
+  document.getElementById('authTabSignup')?.addEventListener('click',()=>authSetMode('signup'));
+  document.getElementById('authForm')?.addEventListener('submit',async e=>{
+    e.preventDefault();if(authBusy)return;
+    const email=document.getElementById('authEmail').value.trim().toLowerCase();
+    const password=document.getElementById('authPassword').value;
+    const name=document.getElementById('authName').value.trim();
+    if(!email||!password){authMessage('Введите почту и пароль.','error');return;}
+    if(authMode==='signup'&&password.length<8){authMessage('Пароль должен содержать не менее 8 символов.','error');return;}
+    authBusy=true;const btn=document.getElementById('authSubmit');btn.disabled=true;btn.textContent='Подождите…';authMessage('');
+    try{
+      if(authMode==='signup'){
+        const data=await authSignUp(email,password,name);
+        if(!data.access_token||!data.user){
+          authSetMode('login');document.getElementById('authEmail').value=email;
+          authMessage('Аккаунт создан. Проверьте почту и подтвердите адрес, затем войдите.','success');return;
+        }
+      }else await authPasswordSignIn(email,password);
+      await finishAuthLogin();
+    }catch(err){authMessage(authFriendlyError(err),'error');}
+    finally{authBusy=false;btn.disabled=false;btn.textContent=authMode==='signup'?'Создать аккаунт':'Войти в аккаунт';}
+  });
+  document.getElementById('authForgot')?.addEventListener('click',async()=>{
+    const email=document.getElementById('authEmail').value.trim().toLowerCase();
+    if(!email){authMessage('Сначала укажите электронную почту.','error');return;}
+    const btn=document.getElementById('authForgot');btn.disabled=true;
+    try{
+      await authRequest('/auth/v1/recover',{email,redirect_to:location.origin+location.pathname});
+      authMessage('Если аккаунт существует, на почту придёт ссылка для восстановления пароля.','success');
+    }catch(err){authMessage(authFriendlyError(err),'error');}
+    finally{btn.disabled=false;}
+  });
+  document.getElementById('authAccountBtn')?.addEventListener('click',authSignOut);
+}
+
 /* ====================== APP STATE / CONSTANTS ====================== */
 const DB_NAME='inkos_db', DB_VER=5;
 let db=null;
@@ -1157,20 +1424,20 @@ function idbPut(store,obj){
     if(!db){ // localStorage fallback
       const arr=S[store]||[]; const i=arr.findIndex(x=>x.id===obj.id);
       if(i>=0) arr[i]=obj; else arr.push(obj);
-      S[store]=arr; persistLocalFallback();
+      S[store]=arr; persistLocalFallback(); scheduleCloudSync();
       resolve(obj); return;
     }
     const tx=db.transaction(store,'readwrite');
     tx.objectStore(store).put(obj);
-    tx.oncomplete=()=>resolve(obj);
+    tx.oncomplete=()=>{ scheduleCloudSync(); resolve(obj); };
     tx.onerror=()=>reject(tx.error);
   });
 }
 function idbDel(store,id){
   return new Promise((resolve,reject)=>{
-    if(!db){ S[store]=(S[store]||[]).filter(x=>x.id!==id); persistLocalFallback(); resolve(); return; }
+    if(!db){ S[store]=(S[store]||[]).filter(x=>x.id!==id); persistLocalFallback(); scheduleCloudSync(); resolve(); return; }
     const tx=db.transaction(store,'readwrite');
-    tx.objectStore(store).delete(id);    tx.oncomplete=()=>resolve();
+    tx.objectStore(store).delete(id);    tx.oncomplete=()=>{ scheduleCloudSync(); resolve(); };
     tx.onerror=()=>reject(tx.error);
   });
 }
@@ -1439,6 +1706,7 @@ $('#skipSplash').onclick=finishSplash;
 /* ====================== PIN LOCK ====================== */
 let pinBuffer='';
 function afterSplash(){
+  if(!currentAuthUser){showAuthScreen();return;}
   if(S.settings.pin){
     showPinScreen('unlock');
   } else {
@@ -1513,23 +1781,24 @@ function finVal(html){
   return S.settings.hideFinance ? `<span title="Финансовые данные скрыты — включите показ в Настройках → Безопасность" style="letter-spacing:2px">••••••</span>` : html;
 }
 async function init(){
-  // Start the splash immediately; database startup must never leave a black screen.
+  bindAuthUI();
   runSplash();
-  const loadTask=(async()=>{
-    try{ db=await idbOpen(); }catch(e){ db=null; }
-    try{ await loadAllData(); }
-    catch(e){ db=null; loadLocalFallback(); }
-  })();
-  await Promise.race([loadTask,new Promise(resolve=>setTimeout(resolve,4500))]);
-  if(!S.settings || !S.settings.id){
-    loadLocalFallback();
-    if(!S.settings || !S.settings.id) S.settings={id:'main',...defaultSettings()};
+  let restored=false;
+  try{restored=await restoreAuthSession();}catch(e){console.warn('INK.OS auth restore:',e);}
+  if(restored){
+    try{await loadAccountData();}
+    catch(e){accountDataReady=false;console.error('INK.OS account load:',e);}
+  }else{
+    // Never load a shared device's local database before a user has authenticated.
+    for(const name of STORES){if(name==='settings')S.settings={id:'main',...defaultSettings()};else S[name]=[];}
   }
   splashDataReady=true;
-  if(splashFinishRequested) finishSplash();
-  if(S.clients.length===0 && S.settings._seeded!==true){
-    // first run: offer demo data via prompt on dashboard; do not auto-seed silently more than once
+  if(splashFinishRequested)finishSplash();
+  if(currentAuthUser&&!accountDataReady){
+    // Keep private sections hidden if the cloud copy could not be loaded.
+    setTimeout(()=>{if(!accountDataReady)showAuthScreen('Не удалось синхронизировать аккаунт. Проверьте интернет и войдите снова.','error');},100);
   }
+  if(S.clients.length===0&&S.settings._seeded!==true){}
 }
 init();
 
