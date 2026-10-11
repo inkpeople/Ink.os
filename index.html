@@ -545,6 +545,20 @@ button,.navbtn,.nav-item,.sheet-item{cursor:pointer}
 .stu-row{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:13px;color:var(--text-dim)}.stu-bar{flex:1;height:7px;background:#1b1b21;border-radius:6px;overflow:hidden}.stu-bar div{height:100%;background:linear-gradient(90deg,#e0222e,#ff5560);border-radius:6px;box-shadow:0 0 8px var(--red-glow)}
 .lessons .l{display:grid;grid-template-columns:74px 48px 1fr;gap:8px;font-size:14px;padding:6px 0}.lessons .l span:first-child{font-weight:700}.lessons .l span:nth-child(2){color:var(--text-dim)}
 .hw-hero{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid #3a2a78;background:linear-gradient(90deg,#1a1038,#0f0a24);cursor:pointer}.hw-hero .cl-av{width:44px;height:44px;font-size:15px;flex-shrink:0}.hw-hero b{display:block;font-size:14.5px}.hw-hero .b{flex:1;min-width:0}
+
+/* Premium finance dashboard */
+.finance-premium-summary{position:relative;overflow:hidden;margin:0 0 14px;padding:17px;border:1px solid rgba(198,163,98,.36);border-radius:20px;background:radial-gradient(ellipse at 95% 0%,rgba(198,163,98,.16),transparent 42%),linear-gradient(145deg,#20201f,#111112 75%);box-shadow:0 14px 34px rgba(0,0,0,.16);color:#f4ead5}
+.finance-summary-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.finance-eyebrow{font-size:10px;font-weight:800;letter-spacing:.16em;color:#c9aa70;text-transform:uppercase}
+.finance-summary-total{margin-top:8px;font-size:clamp(27px,7vw,38px);line-height:1.12;font-weight:850;letter-spacing:-.045em;color:#f4ead5;overflow-wrap:anywhere}
+.finance-summary-caption{margin-top:5px;font-size:11px;color:var(--muted,#aaa)}
+.finance-summary-mark{flex:0 0 43px;width:43px;height:43px;display:grid;place-items:center;border:1px solid rgba(201,170,112,.48);border-radius:14px;background:rgba(201,170,112,.08);font-size:21px;color:#d8bd86}
+.finance-summary-mark svg{width:22px;height:22px}
+.finance-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:15px}
+.finance-stat{min-width:0;padding:11px;border:1px solid rgba(198,163,98,.18);border-radius:13px;background:rgba(255,255,255,.025)}
+.finance-stat span{display:block;color:var(--muted,#a6a097);font-size:10px;line-height:1.45}
+.finance-stat strong{display:block;margin-top:6px;font-size:16px;line-height:1.35;font-weight:750;color:#f4ead5;overflow-wrap:anywhere}
+@media(max-width:360px){.finance-premium-summary{padding:14px}.finance-stat{padding:9px}.finance-stat strong{font-size:14px}}
 </style>
 </head>
 <body>
@@ -3066,10 +3080,22 @@ RENDERERS.finance=function(){
     <span></span>
     <button class="btn btn-primary btn-icon btn-sm" onclick="openFinanceForm()">${icon('plus')}</button>
   </div>
-  <div class="fin-pair">
-    <div class="fin-card inc">${icon('coin')}<div class="fl">Доход</div><div class="fv">${finVal(fmtMoney(income))}</div></div>
-    <div class="fin-card exp">${icon('reports')}<div class="fl">Расходы</div><div class="fv">${finVal(fmtMoney(expense))}</div></div>
-  </div>
+  <section class="finance-premium-summary">
+    <div class="finance-summary-top">
+      <div>
+        <div class="finance-eyebrow">ФИНАНСЫ · ${{day:'СЕГОДНЯ',week:'НЕДЕЛЯ',month:'МЕСЯЦ',quarter:'КВАРТАЛ',year:'ГОД',all:'ВСЁ ВРЕМЯ'}[financePeriod]}</div>
+        <div class="finance-summary-total">${finVal(fmtMoney(income-expense))}</div>
+        <div class="finance-summary-caption">Чистая прибыль за выбранный период</div>
+      </div>
+      <div class="finance-summary-mark">${icon('finance')}</div>
+    </div>
+    <div class="finance-summary-grid">
+      <div class="finance-stat"><span>Доход</span><strong>${finVal(fmtMoney(income))}</strong></div>
+      <div class="finance-stat"><span>Расходы</span><strong>${finVal(fmtMoney(expense))}</strong></div>
+      <div class="finance-stat"><span>Записей за период</span><strong>${recordsCount}</strong></div>
+      <div class="finance-stat"><span>Средний чек</span><strong>${finVal(fmtMoney(avgCheck))}</strong></div>
+    </div>
+  </section>
   ${financePeriod!=='all'?`<div class="fin-forecast" onclick="openForecastSheet()">
     <div><div class="fl">Ещё заработаю ${fcLabel}</div><div class="fv">+${finVal(fmtMoney(fcExpected))}</div><div class="small dim">${fcList.length?fcList.length+' '+pl(fcList.length,'запись','записи','записей')+' с неоплаченным остатком':'Нет предстоящих записей с остатком'}</div></div>
     <div class="tot"><div class="fl">Итого за период</div><div class="fv">${finVal(fmtMoney(income+fcExpected))}</div><div class="small dim">с учётом прогноза</div></div>
