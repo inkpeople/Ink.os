@@ -4320,17 +4320,27 @@ async function analyzeCameraFrameWithAI(frameData,m){
   photoCoachState.busy=true;const status=$('#camAIStatus');
   try{
     const prompt='Ты — ИИ-фотограф для портфолио тату-мастера. Посмотри на текущий кадр и дай 1–3 коротких действия, которые помогут улучшить снимок прямо сейчас. Оцени кадрирование, угол камеры, отражения/блики на коже, направление и равномерность света, резкость/смаз, читаемость татуировки и лишний фон. Не выдумывай точное расстояние или оптический зум. Метрики браузера: яркость '+Math.round(m.avg)+'/255, контраст '+Math.round(m.contrast)+', потенциальные пересветы '+m.glare.toFixed(1)+'%, детализация '+m.sharp.toFixed(1)+', оценка '+m.score+'/100. Локальные замечания: '+m.hints.join(' ')+' Отвечай по-русски, кратко и практично.';
-    const models=['qwen/qwen2.5-vl-32b-instruct:free','google/gemma-3-27b-it:free'];let answer='';
+    const models=['qwen/qwen2.5-vl-32b-instruct:free','google/gemma-3-27b-it:free','google/gemma-3-12b-it:free'];let answer='',failures=[];
     for(const model of models){
       try{
         const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.openRouterKey,'HTTP-Referer':location.origin,'X-Title':'INK.OS Photo Coach'},body:JSON.stringify({model:model,messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:frameData}}]}],temperature:0.2,max_tokens:220})});
-        const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error('HTTP '+res.status);
-        answer=String(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content||'').trim();if(answer)break;
-      }catch(e){console.warn('INK.OS Photo Coach model failed',model,e);}
+        const data=await res.json().catch(()=>({}));
+        if(!res.ok)throw new Error('HTTP '+res.status+(data.error&&data.error.message?': '+data.error.message:''));
+        answer=String(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content||'').trim();
+        if(!answer)throw new Error('модель вернула пустой ответ');
+        break;
+      }catch(e){const msg=String(e.message||e);failures.push(model+': '+msg);console.warn('INK.OS Photo Coach model failed',model,msg);}
     }
-    if(answer){photoCoachState.lastAdvice=answer;const advice=$('#camAIAdvice');if(advice)advice.innerHTML='<b>Совет ИИ:</b> '+esc(answer).replace(/\n/g,'<br>');if(status)status.textContent='ИИ обновил рекомендации. Следующая проверка примерно через 7 секунд.';}
-    else if(status)status.textContent='ИИ-модели сейчас не ответили. Локальные измерения продолжают работать.';
-  }catch(e){console.warn('INK.OS Photo Coach error',e);if(status)status.textContent='Не удалось получить совет ИИ. Проверь интернет и настройки OpenRouter.';}
+    if(answer){
+      photoCoachState.lastAdvice=answer;
+      const advice=$('#camAIAdvice');if(advice)advice.innerHTML='<b>Совет ИИ:</b> '+esc(answer).replace(/\n/g,'<br>');
+      if(status)status.textContent='ИИ обновил рекомендации. Следующая проверка примерно через 7 секунд.';
+    }else{
+      const detail=failures.length?failures[failures.length-1].replace(/^.*?: /,''):'неизвестная ошибка';
+      if(status)status.textContent='Облачный ИИ не ответил ('+detail+'). Локальные измерения продолжают работать. Проверь ключ, лимит и доступность бесплатных моделей.';
+      console.warn('INK.OS Photo Coach all models failed',failures);
+    }
+  }catch(e){console.warn('INK.OS Photo Coach error',e);if(status)status.textContent='Ошибка ИИ: '+String(e.message||e)+'. Локальные измерения продолжают работать.';}
   finally{photoCoachState.busy=false;}
 }
 /* --- Photo editor --- */
