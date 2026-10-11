@@ -3595,6 +3595,21 @@ RENDERERS.finance=function(){
   const items=S.finance.filter(f=>financeScope(f));
   const income=items.filter(f=>f.type==='income').reduce((s,f)=>s+Number(f.amount||0),0);
   const expense=items.filter(f=>f.type==='expense').reduce((s,f)=>s+Number(f.amount||0),0);
+  const now=new Date();
+  const monthKey=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const yearKey=String(now.getFullYear());
+  const monthIncome=S.finance.filter(f=>f.type==='income'&&(f.date||'').startsWith(monthKey)).reduce((a,f)=>a+Number(f.amount||0),0);
+  const monthExpense=S.finance.filter(f=>f.type==='expense'&&(f.date||'').startsWith(monthKey)).reduce((a,f)=>a+Number(f.amount||0),0);
+  const yearIncome=S.finance.filter(f=>f.type==='income'&&(f.date||'').startsWith(yearKey)).reduce((a,f)=>a+Number(f.amount||0),0);
+  const yearExpense=S.finance.filter(f=>f.type==='expense'&&(f.date||'').startsWith(yearKey)).reduce((a,f)=>a+Number(f.amount||0),0);
+  const monthlyGoal=Math.max(0,Number(S.settings.monthGoal||0));
+  const taxRate=Math.max(0,Math.min(100,Number(S.settings.taxRate||0)));
+  const monthRemaining=monthlyGoal?Math.max(0,monthlyGoal-monthIncome):0;
+  const monthProgress=monthlyGoal?Math.min(100,Math.round(monthIncome/monthlyGoal*100)):0;
+  const completedMonthEvents=S.events.filter(e=>e.status==='completed'&&(e.date||'').startsWith(monthKey)&&Number(e.cost||0)>0);
+  const monthAvgCheck=completedMonthEvents.length?Math.round(completedMonthEvents.reduce((a,e)=>a+Number(e.cost||0),0)/completedMonthEvents.length):0;
+  const monthTax=monthIncome*taxRate/100;
+  const monthNet=monthIncome-monthExpense-monthTax;
   window._finItems=items;
 
   const {start,end}=periodRangeISO(financePeriod,0);
@@ -3629,9 +3644,23 @@ RENDERERS.finance=function(){
 
   $('#content').innerHTML=`
   <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
-    <span></span>
+    <div><h2 style="margin:0">Финансы</h2><div class="small dim">Реальные операции и прогноз поступлений</div></div>
     <button class="btn btn-primary btn-icon btn-sm" onclick="openFinanceForm()">${icon('plus')}</button>
   </div>
+  <section class="finance-premium-summary">
+    <div class="finance-summary-top"><div><div class="finance-eyebrow">ТЕКУЩИЙ МЕСЯЦ · ${MON[now.getMonth()]} ${now.getFullYear()}</div><div class="finance-summary-total">${finVal(fmtMoney(monthIncome))}</div><div class="finance-summary-caption">Фактически записанный доход за месяц</div></div><div class="finance-summary-mark">₽</div></div>
+    <div class="finance-summary-grid">
+      <div class="finance-stat"><span>Рабочие расходы</span><b>${finVal(fmtMoney(monthExpense))}</b><small>за текущий месяц</small></div>
+      <div class="finance-stat"><span>Остаток после расходов и налога</span><b>${finVal(fmtMoney(monthNet))}</b><small>налог рассчитан по ставке ${taxRate}%</small></div>
+      <div class="finance-stat"><span>Заработано за год</span><b>${finVal(fmtMoney(yearIncome))}</b><small>${now.getFullYear()} год</small></div>
+      <div class="finance-stat"><span>Расходы за год</span><b>${finVal(fmtMoney(yearExpense))}</b><small>${now.getFullYear()} год</small></div>
+      <div class="finance-stat"><span>Средний чек</span><b>${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small>${completedMonthEvents.length} завершённых сеансов с ценой</small></div>
+      <div class="finance-stat"><span>До месячной цели</span><b>${monthlyGoal?(monthRemaining?finVal(fmtMoney(monthRemaining)):'Цель достигнута'):'Не задана'}</b><small>${monthlyGoal?'Цель: '+fmtMoney(monthlyGoal):'Задайте цель в настройках ниже'}</small></div>
+    </div>
+    ${monthlyGoal?`<div class="finance-goal-row"><div><span>Выполнение месячной цели</span><b>${monthProgress}%</b></div><div class="finance-goal-track"><div style="width:${monthProgress}%"></div></div></div>`:''}
+    <div class="finance-summary-foot"><span>Расчётный налог: <b>${finVal(fmtMoney(monthTax))}</b></span><span>Доход минус расходы: <b>${finVal(fmtMoney(monthIncome-monthExpense))}</b></span></div>
+    <div class="finance-summary-actions"><button class="btn btn-sm" onclick="openFinanceGoalSettings()">Настроить цель и налог</button><button class="btn btn-sm" onclick="exportCSV('finance')">Экспорт операций</button></div>
+  </section>
   <div class="fin-pair">
     <div class="fin-card inc">${icon('coin')}<div class="fl">Доход</div><div class="fv">${finVal(fmtMoney(income))}</div></div>
     <div class="fin-card exp">${icon('reports')}<div class="fl">Расходы</div><div class="fv">${finVal(fmtMoney(expense))}</div></div>
@@ -3730,6 +3759,15 @@ function openForecastSheet(){
     ${list.map(x=>`<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line);cursor:pointer" onclick="closeSheet();openEventView('${x.e.id}')"><span>${fmtDate(x.e.date)}${x.e.start?' · '+x.e.start:''} — ${esc(clientOrLabel(x.e))}</span><b>${finVal(fmtMoney(x.rest))}</b></div>`).join('')}
     <div class="row" style="margin-top:10px"><b>Всего</b><b>${finVal(fmtMoney(total))}</b></div>`
     :'<p class="dim small">Нет предстоящих записей с неоплаченным остатком. Укажите стоимость в записи, чтобы она попала в прогноз.</p>');
+}
+function openFinanceGoalSettings(){
+  const rate=Number(S.settings.taxRate||0), goal=Number(S.settings.monthGoal||0);
+  openModal(`<div class="modal-header"><h3>Цель и налог</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <form id="financeGoalForm"><div class="field-row">
+  <div><label>Цель дохода на месяц</label><input type="number" id="financeGoalValue" min="0" step="1000" value="${goal||''}" placeholder="Например, 150000"></div>
+  <div><label>Налог, %</label><input type="number" id="financeTaxValue" min="0" max="100" step="0.5" value="${rate}"></div>
+  </div><div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" type="submit">Сохранить</button></div></form>`);
+  $('#financeGoalForm').onsubmit=async ev=>{ev.preventDefault();S.settings.monthGoal=Math.max(0,Number($('#financeGoalValue').value||0));S.settings.taxRate=Math.max(0,Math.min(100,Number($('#financeTaxValue').value||0)));await saveSettings();closeModal();RENDERERS.finance();toast('Финансовые цели сохранены');};
 }
 function setFinPeriod(p){ financePeriod=p; RENDERERS.finance(); }
 function openFinanceForm(){
@@ -6008,6 +6046,29 @@ tr:hover{background:rgba(180,154,106,.045)}
 .pj-bar{height:9px;border-radius:99px;overflow:hidden;background:rgba(255,255,255,.08);border:1px solid rgba(198,163,98,.15)}
 .pj-bar>div{height:100%;border-radius:99px;background:linear-gradient(90deg,#8c6b34,#d6b56e,#f3dfaa);box-shadow:0 0 12px rgba(214,181,110,.2);transition:width .6s ease}
 @media(max-width:390px){.an-row{grid-template-columns:minmax(52px,68px) minmax(32px,1fr) minmax(52px,64px);gap:6px}.an-row>b{font-size:10px}.an-metric{padding:10px}.an-metric b{font-size:13px}}
-</style></style>
+</style>
+/* Premium finance dashboard */
+.finance-premium-summary{position:relative;overflow:hidden;margin:0 0 14px;padding:17px;border:1px solid rgba(198,163,98,.36);border-radius:20px;background:radial-gradient(ellipse at 95% 0%,rgba(198,163,98,.16),transparent 42%),linear-gradient(145deg,#20201f,#111112 75%);box-shadow:0 14px 34px rgba(0,0,0,.16)}
+.finance-summary-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.finance-eyebrow{font-size:10px;font-weight:800;letter-spacing:.16em;color:#c9aa70}
+.finance-summary-total{margin-top:8px;font-size:clamp(27px,7vw,38px);line-height:1.12;font-weight:850;letter-spacing:-.045em;color:#f4ead5;overflow-wrap:anywhere}
+.finance-summary-caption{margin-top:5px;font-size:11px;color:var(--muted,#aaa)}
+.finance-summary-mark{flex:0 0 43px;width:43px;height:43px;display:grid;place-items:center;border:1px solid rgba(201,170,112,.48);border-radius:14px;background:rgba(201,170,112,.08);font-size:21px;color:#d8bd86}
+.finance-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:15px}
+.finance-stat{min-width:0;padding:11px;border:1px solid rgba(198,163,98,.18);border-radius:13px;background:rgba(255,255,255,.025)}
+.finance-stat span,.finance-stat small{display:block;color:var(--muted,#a6a097);font-size:10px;line-height:1.45}
+.finance-stat b{display:block;margin-top:6px;font-size:clamp(13px,3.5vw,17px);line-height:1.25;color:#f1e7d2;overflow-wrap:anywhere}
+.finance-stat small{margin-top:4px;font-size:9px}
+.finance-goal-row{margin-top:14px}
+.finance-goal-row>div:first-child{display:flex;justify-content:space-between;gap:8px;margin-bottom:7px;font-size:11px;color:#c8c0b4}
+.finance-goal-row>div:first-child b{color:#e6c982}
+.finance-goal-track{height:9px;overflow:hidden;border:1px solid rgba(198,163,98,.2);border-radius:99px;background:rgba(255,255,255,.07)}
+.finance-goal-track>div{height:100%;border-radius:99px;background:linear-gradient(90deg,#80602e,#c7a15a,#f1dda4);box-shadow:0 0 12px rgba(214,181,110,.2);transition:width .6s ease}
+.finance-summary-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:7px 14px;margin-top:13px;padding-top:11px;border-top:1px solid rgba(198,163,98,.16);font-size:10px;color:var(--muted,#a6a097)}
+.finance-summary-foot b{color:#eee3cf}
+.finance-summary-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.finance-summary-actions .btn{border-color:rgba(198,163,98,.25)}
+@media(max-width:360px){.finance-premium-summary{padding:13px}.finance-summary-grid{gap:6px}.finance-stat{padding:9px}.finance-stat span{font-size:9px}}
+</style>
 </body>
 </html>
