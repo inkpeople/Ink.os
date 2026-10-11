@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-account-isolation-v31';
+const CACHE_NAME = 'ink-os-shell-password-eye-v32';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './vk-link.js', './client-retention.js'];
 
 self.addEventListener('install', event => {
