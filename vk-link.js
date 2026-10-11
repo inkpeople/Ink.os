@@ -48,13 +48,19 @@
   function injectVkButton(){
     if(!activeClientId)return;
     const area=document.querySelector('#modalBody .cl-actions, .modal-body .cl-actions, .cl-actions');
-    if(!area||area.querySelector('[data-vk-link-button]'))return;
-    const b=document.createElement('button');
-    b.type='button';b.className='btn';b.dataset.vkLinkButton='1';
-    b.textContent='Подключить VK';
-    b.style.gridColumn='1 / -1';
+    if(!area)return;
+    // Deduplicate VK linking controls in the client profile; preserve one working button.
+    const matches=Array.from(area.querySelectorAll('button,a')).filter(el=>/подключить\s*(vk|вконтакте)/i.test((el.textContent||'').trim()));
+    let b=matches.find(el=>el.dataset.vkLinkButton==='1')||matches[0];
+    matches.forEach(el=>{if(el!==b)el.remove();});
+    if(!b){
+      b=document.createElement('button');
+      b.type='button';b.className='btn';b.textContent='Подключить VK';
+      b.style.gridColumn='1 / -1';
+      area.appendChild(b);
+    }
+    b.dataset.vkLinkButton='1';
     b.onclick=()=>window.startVkLink(activeClientId);
-    area.appendChild(b);
   }
   const original=window.openClient;
   if(typeof original==='function'){
