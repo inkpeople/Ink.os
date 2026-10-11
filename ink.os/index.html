@@ -1863,6 +1863,53 @@ function renderClientsList(){
       <div class="small dim" style="margin-top:4px">Визитов: ${c.visits||0} · Сумма: ${fmtMoney(c.totalSum)} · Последний визит: ${fmtDate(c.lastVisit)}</div>
     </div>`).join('') : '<p class="dim">Клиенты не найдены.</p>';
 }
+function normalizeClientLink(value){
+  let raw=String(value||'').trim().toLowerCase();
+  if(!raw) return '';
+  raw=raw.replace(/^@/,'').replace(/[?#].*$/,'').replace(/\/$/,'');
+  try{
+    const u=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw);
+    const host=u.hostname.replace(/^www\./,'');
+    const path=u.pathname.replace(/\/+$/,'');
+    return (host+'/'+path).replace(/\/$/,'');
+  }catch(_){ return raw.replace(/\s+/g,''); }
+}
+function clientProfileValues(c){
+  return [c&&c.profileLink,c&&c.vk,c&&c.instagram,c&&c.telegram,c&&c.max,c&&c.whatsapp]
+    .map(normalizeClientLink).filter(Boolean);
+}
+function findClientByProfileLink(value){
+  const key=normalizeClientLink(value);
+  if(!key) return null;
+  return (S.clients||[]).find(c=>clientProfileValues(c).includes(key))||null;
+}
+function autoClientAvatarUrl(c){
+  if(!c) return '';
+  const sources=[
+    ['vk',c.vk],['instagram',c.instagram],['telegram',c.telegram]
+  ];
+  for(const [provider,value] of sources){
+    const raw=String(value||'').trim();
+    if(!raw) continue;
+    if(/^https?:\/\/[^\s]+\.(?:jpe?g|png|webp|gif)(?:[?#].*)?$/i.test(raw)) return raw;
+    let username=raw;
+    try{
+      if(/^https?:\/\//i.test(raw)){
+        const u=new URL(raw);
+        const host=u.hostname.replace(/^www\./,'').toLowerCase();
+        if(provider==='vk' && (host==='vk.com'||host==='m.vk.com')) username=u.pathname.split('/').filter(Boolean)[0]||'';
+        else if(provider==='instagram' && host==='instagram.com') username=u.pathname.split('/').filter(Boolean)[0]||'';
+        else if(provider==='telegram' && (host==='t.me'||host==='telegram.me')) username=u.pathname.split('/').filter(Boolean)[0]||'';
+        else continue;
+      }else username=raw.replace(/^@/,'').replace(/^https?:\/\/(?:www\.)?(?:vk\.com|instagram\.com|t\.me)\//i,'').split(/[/?#]/)[0];
+    }catch(_){ continue; }
+    username=String(username||'').replace(/^@/,'').trim();
+    if(username && /^[a-z0-9._-]+$/i.test(username) && !/^(id\d+|club\d+|public\d+|photo\d+_\d+)$/i.test(username)){
+      return 'https://unavatar.io/'+provider+'/'+encodeURIComponent(username);
+    }
+  }
+  return '';
+}
 function openClientForm(existing){
   const c=existing||{id:null,name:'',phone:'',instagram:'',whatsapp:'',telegram:'',vk:'',max:'',profileLink:'',city:'',country:'',cameFrom:'',firstVisit:todayISO(),lastVisit:'',visits:0,totalSum:0,source:'',styles:'',zones:'',status:'Новый',nextContact:'',quickNotes:[],birthDate:'',allergies:'',comment:''};
   openModal(`<div class="modal-header"><h3>${existing?'Редактировать клиента':'Новый клиент'}</h3><button class="x" onclick="closeModal()">✕</button></div>
@@ -2058,6 +2105,7 @@ function openClientForm(existing){
     const oldStatus=c.status, oldComment=c.comment;
     const obj={...c};
     fd.forEach((v,k)=>obj[k]=v);
+    if(!obj.avatar){ const avatarUrl=autoClientAvatarUrl(obj); if(avatarUrl) obj.avatar=avatarUrl; }
     obj.reminderConsent=!!$('#clientReminderConsent')?.checked;
     obj.reminderChannel=String(obj.reminderChannel||'telegram').toLowerCase()==='vk'?'vk':'telegram';
     obj.telegramChatId=String(obj.telegramChatId||'').trim();
@@ -3103,7 +3151,7 @@ function openDayAdd(iso){
 }
 function openEventForm(id,presets){
   const existing=id?S.events.find(e=>e.id===id):null;
-  const e=existing||{id:null,title:'',type:(presets&&presets.type)||'session',date:(presets&&presets.date)||todayISO(),start:'10:00',end:'11:00',clientId:(presets&&presets.clientId)||'',studentId:'',cost:'',bookingAmount:'',comment:'',link:'',reminder:'',status:'planned',homeworkId:'',serviceType:'Тату',zone:'',styles:[],clientIdeas:'',referenceImages:[]};
+  const e=existing||{id:null,title:'',type:(presets&&presets.type)||'session',date:(presets&&presets.date)||todayISO(),start:'10:00',end:'11:00',clientId:(presets&&presets.clientId)||'',clientProfileLink:'',studentId:'',cost:'',bookingAmount:'',comment:'',link:'',reminder:'',status:'planned',homeworkId:'',serviceType:'Тату',zone:'',styles:[],clientIdeas:'',referenceImages:[]};
   const client=e.clientId?S.clients.find(c=>c.id===e.clientId):null;
   const isTattooEvent=['session','correction','model'].includes(e.type);
   openModal(`<div class="modal-header"><h3>${existing?'Событие':'Новое событие'}</h3><button class="x" onclick="closeModal()">✕</button></div>
@@ -3117,6 +3165,8 @@ function openEventForm(id,presets){
     <div><label>Окончание</label><input type="time" name="end" value="${e.end||''}"></div>
   </div>
   <label>Клиент</label><select name="clientId" id="evtClientSelect"><option value="">—</option>${S.clients.map(c=>`<option value="${c.id}" ${e.clientId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}<option value="__new__">+ Новый клиент…</option></select>
+  <label>Ссылка на профиль клиента</label><input name="clientProfileLink" id="evtClientProfileLink" value="${esc(e.clientProfileLink||'')}" placeholder="Вставь ссылку VK / Instagram / Telegram">
+  <div class="small dim" id="evtClientMatchHint" style="margin:-2px 0 8px">Если ссылка уже есть в карточке клиента, INK.OS выберет существующего клиента — повторно создавать его не нужно.</div>
   <label>Контакты</label>
   <div id="evtContactsRow"></div>
   <label>Ученик</label><select name="studentId"><option value="">—</option>${S.students.map(st=>`<option value="${st.id}" ${e.studentId===st.id?'selected':''}>${esc(st.name)}</option>`).join('')}</select>
@@ -3176,7 +3226,37 @@ function openEventForm(id,presets){
   function renderContacts(){
     const c=S.clients.find(x=>x.id===$('#evtClientSelect').value);
     $('#evtContactsRow').innerHTML = `<div class="contact-ic-row">${contactIconsRowHtml(c)}</div>`;
+    const profileInput=$('#evtClientProfileLink');
+    const hint=$('#evtClientMatchHint');
+    if(c && profileInput && !profileInput.value.trim()) profileInput.value=c.profileLink||c.vk||c.instagram||c.telegram||'';
+    if(hint) hint.textContent=c ? ('Выбран клиент: '+c.name+'. Данные и фотография берутся из его карточки.') : 'Если ссылка уже есть в карточке клиента, INK.OS выберет существующего клиента — повторно создавать его не нужно.';
   }
+  $('#evtClientProfileLink').addEventListener('change',()=>{
+    const value=$('#evtClientProfileLink').value.trim();
+    const found=findClientByProfileLink(value);
+    const hint=$('#evtClientMatchHint');
+    if(found){
+      $('#evtClientSelect').value=found.id;
+      renderContacts();
+      renderProjectOptions();
+      if(hint) hint.textContent='Найдена существующая карточка: '+found.name+'. Дубликат не создан.';
+      toast('Подставлена карточка клиента: '+found.name);
+    }else if(value){
+      if(hint) hint.textContent='Совпадение не найдено. Выбери клиента из списка или создай нового отдельно.';
+      toast('Клиент по этой ссылке не найден');
+    }
+  });
+  $('#evtClientProfileLink').addEventListener('paste',()=>setTimeout(()=>{
+    const value=$('#evtClientProfileLink').value.trim();
+    const found=findClientByProfileLink(value);
+    if(found){
+      $('#evtClientSelect').value=found.id;
+      renderContacts();
+      renderProjectOptions();
+      const hint=$('#evtClientMatchHint');
+      if(hint) hint.textContent='Найдена существующая карточка: '+found.name+'. Дубликат не создан.';
+    }
+  },0));
   function renderProjectOptions(){
     const sel=$('#evtProjectSelect'); if(!sel) return;
     const clientId=$('#evtClientSelect').value;
@@ -3203,6 +3283,9 @@ function openEventForm(id,presets){
       openQuickClientSheet('evtClientSelect');
       return;
     }
+    const selected=S.clients.find(c=>c.id===$('#evtClientSelect').value);
+    const profileInput=$('#evtClientProfileLink');
+    if(selected && profileInput && !profileInput.value.trim()) profileInput.value=selected.profileLink||selected.vk||selected.instagram||selected.telegram||'';
     renderContacts();
     renderProjectOptions();
   };
