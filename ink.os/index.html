@@ -2137,32 +2137,36 @@ function openClientMenu(id){
 }
 window.startTelegramLink = async function(id){
   const client=S.clients.find(x=>String(x.id)===String(id));
-  if(!client){toast('Клиент не найден');return;}
+  if(!client){alert('Клиент не найден. Закрой карточку и открой её снова.');return;}
   let token='';
   try{
     if(window.crypto&&typeof window.crypto.getRandomValues==='function'){
       const bytes=new Uint8Array(24);window.crypto.getRandomValues(bytes);
       token=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
     }else{for(let i=0;i<48;i++)token+=Math.floor(Math.random()*16).toString(16);}
+    openModal('<div class="cl-top"><span class="cl-ttl">Подключение Telegram</span><button class="cl-ib" onclick="closeModal()">✕</button></div><p id="telegramLinkStatus" class="small">Создаю персональную ссылку…</p>');
     client.telegramLinkToken=token;
     await idbPut('clients',client);
     const url='https://t.me/Ramzestattoo_bot?start=link_'+token;
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
     let response;
     try{
       response=await fetch('https://jgzzdsittnzomedvsspj.supabase.co/functions/v1/inkos-telegram-link',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({token:token,clientId:String(client.id),kind:'client',name:client.name,phone:client.phone||''}),
+        body:JSON.stringify({token:token,clientId:String(client.id),kind:'client',name:client.name||'',phone:client.phone||''}),
         signal:controller.signal
       });
     }finally{clearTimeout(timer);}
     const result=await response.json().catch(()=>({}));
-    if(!response.ok||result.ok!==true)throw new Error(result.error||'HTTP '+response.status);
-    try{await navigator.clipboard.writeText(url);toast('Ссылка Telegram создана и скопирована. Отправь её клиенту.');}
-    catch(err){
-      openModal('<div class="cl-top"><span class="cl-ttl">Ссылка Telegram</span><button class="cl-ib" onclick="closeModal()">✕</button></div><p class="small dim">Отправь эту ссылку клиенту для привязки уведомлений.</p><input id="clientTelegramLinkResult" readonly value="'+esc(url)+'" style="width:100%;margin:10px 0"><button class="btn btn-primary" onclick="document.getElementById(\'clientTelegramLinkResult\').select();document.execCommand(\'copy\');toast(\'Ссылка скопирована\')">Копировать ссылку</button>');
-    }
-  }catch(err){console.error('Telegram linking failed:',err);toast('Не удалось подключить Telegram: '+(err.message||'ошибка'));}
+    if(!response.ok||result.ok!==true)throw new Error(result.error||('HTTP '+response.status));
+    const body=document.querySelector('#modalBody');
+    if(body)body.innerHTML='<div class="cl-top"><span class="cl-ttl">Telegram готов</span><button class="cl-ib" onclick="closeModal()">✕</button></div><p class="small">Отправь эту персональную ссылку клиенту. После открытия бот попросит подтвердить согласие на уведомления.</p><input id="clientTelegramLinkResult" readonly value="'+esc(url)+'" style="width:100%;margin:10px 0"><button class="btn btn-primary" onclick="(async()=>{const el=document.getElementById(\'clientTelegramLinkResult\');try{await navigator.clipboard.writeText(el.value);toast(\'Ссылка скопирована\')}catch(e){el.select();document.execCommand(\'copy\')} })()">Копировать ссылку</button><a class="btn" href="'+esc(url)+'" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:8px">Открыть Telegram</a>';
+  }catch(err){
+    console.error('Telegram linking failed:',err);
+    const msg=String(err&&err.message||err||'неизвестная ошибка');
+    const body=document.querySelector('#modalBody');
+    if(body)body.innerHTML='<div class="cl-top"><span class="cl-ttl">Telegram не подключён</span><button class="cl-ib" onclick="closeModal()">✕</button></div><p class="small">Не удалось зарегистрировать ссылку. Причина: <b>'+esc(msg)+'</b></p><p class="small dim">Проверь интернет и нажми «Подключить Telegram» ещё раз.</p><button class="btn btn-primary" onclick="closeModal();window.startTelegramLink(\''+String(id).replace(/'/g,'\\\\\\'')+'\')">Повторить</button>';
+  }
 };
 function openClient(id,tab){
   const c=S.clients.find(x=>x.id===id); if(!c) return;
