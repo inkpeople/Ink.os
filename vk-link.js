@@ -46,7 +46,7 @@
   };
   let activeClientId=null;
   function injectVkButton(){
-    if(!activeClientId)return;
+    return; // The client profile already renders its own VK button.
     const area=document.querySelector('#modalBody .cl-actions, .modal-body .cl-actions, .cl-actions');
     if(!area)return;
     // Deduplicate VK linking controls in the client profile; preserve one working button.
