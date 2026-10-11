@@ -4262,7 +4262,7 @@ function wireCamera(){
   };
 }
 function stopCamera(){ if(photoState.cameraStream){ photoState.cameraStream.getTracks().forEach(t=>t.stop()); photoState.cameraStream=null; } }
-let photoCoachState={lastRequest:0,busy:false};
+let photoCoachState={lastRequest:0,busy:false,lastAdvice:''};
 function setupCameraZoom(stream){
   const track=stream.getVideoTracks()[0], input=$('#camZoom'), label=$('#camZoomLabel');
   if(!track||!input)return;
@@ -4284,7 +4284,7 @@ function photoCoachConsentChanged(){
 }
 function analyzeFrameLoop(){
   const v=$('#camVideo'), ov=$('#camOverlay');
-  if(!v||v.style.display==='none'||!photoState.cameraStream||!v.videoWidth)return;
+  if(!v||v.style.display==='none'||!photoState.cameraStream)return;\n  if(!v.videoWidth){requestAnimationFrame(analyzeFrameLoop);return;}
   if(ov){ov.width=v.clientWidth;ov.height=v.clientHeight;}
   const tmp=document.createElement('canvas');tmp.width=96;tmp.height=120;
   const ctx=tmp.getContext('2d',{willReadFrequently:true});ctx.drawImage(v,0,0,96,120);
@@ -4306,7 +4306,7 @@ function analyzeFrameLoop(){
   const track=photoState.cameraStream.getVideoTracks()[0], settings=track&&track.getSettings?track.getSettings():{};
   const zoomText=settings.zoom?' · зум '+Number(settings.zoom).toFixed(1)+'×':'';
   const wrap=$('#camScoreWrap');
-  if(wrap)wrap.innerHTML='<div>Готовность кадра: <b>'+score+'/100</b>'+zoomText+'</div><div class="dim" style="margin-top:4px">Освещение: '+Math.round(avg)+'/255 · контраст: '+Math.round(contrast)+' · потенциальные блики: '+glare.toFixed(1)+'% · детализация: '+sharp.toFixed(1)+'</div><div style="margin-top:6px">'+(hints.length?hints.join(' '):'Свет и детализация выглядят приемлемо. Проверь, что вся татуировка в кадре и фон не отвлекает.')+'</div><div id="camAIAdvice" style="margin-top:8px"></div>';
+  if(wrap)wrap.innerHTML='<div>Готовность кадра: <b>'+score+'/100</b>'+zoomText+'</div><div class="dim" style="margin-top:4px">Освещение: '+Math.round(avg)+'/255 · контраст: '+Math.round(contrast)+' · потенциальные блики: '+glare.toFixed(1)+'% · детализация: '+sharp.toFixed(1)+'</div><div style="margin-top:6px">'+(hints.length?hints.join(' '):'Свет и детализация выглядят приемлемо. Проверь, что вся татуировка в кадре и фон не отвлекает.')+'</div><div id="camAIAdvice" style="margin-top:8px">'+(photoCoachState.lastAdvice?'<b>Совет ИИ:</b> '+esc(photoCoachState.lastAdvice).replace(/\\n/g,'<br>'):'')+'</div>';
   const cfg=aiProviderConfig(), consent=$('#camCloudConsent'), status=$('#camAIStatus');
   if(consent&&consent.checked&&cfg.cloudEnabled&&cfg.openRouterKey){
     if(!photoCoachState.busy&&Date.now()-photoCoachState.lastRequest>7000){photoCoachState.lastRequest=Date.now();analyzeCameraFrameWithAI(tmp.toDataURL('image/jpeg',0.5),{avg:avg,contrast:contrast,glare:glare,sharp:sharp,score:score,hints:hints});}
