@@ -699,7 +699,7 @@ table{border-collapse:separate!important;border-spacing:0!important;font-size:12
 .auth-msg.error{color:#ff817b}.auth-msg.success{color:#69db9a}
 .auth-note{font-size:10px;line-height:1.5;color:#756a64;margin-top:16px;text-align:center}
 #authAccountBtn{max-width:180px;overflow:hidden;text-overflow:ellipsis}
-@media(max-width:520px){.auth-card{padding:22px 18px}.auth-brand{font-size:25px}#authAccountBtn{display:none}}
+@media(max-width:520px){.auth-card{padding:22px 18px}.auth-brand{font-size:25px}#authAccountBtn{display:inline-flex;max-width:76px;padding:0 6px;font-size:10px}}
 
 </style>
 </head>
@@ -969,7 +969,7 @@ async function finishAuthLogin(){
     await loadAccountData();
     authScreen(false);
     const app=document.getElementById('app');if(app)app.classList.remove('hidden');
-    if(!appBooted)bootApp();
+    if(!appBooted){if(S.settings.pin)showPinScreen('unlock');else bootApp();}
   }catch(e){
     accountDataReady=false;
     showAuthScreen('Не удалось открыть аккаунт: '+authFriendlyError(e),'error');
@@ -5450,7 +5450,7 @@ function generateAppIcon(){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   try{
     const swUrl=new URL('sw.js',document.baseURI);
-    swUrl.searchParams.set('build','finance-refresh-20261012-v30');
+    swUrl.searchParams.set('build','account-isolation-20261012-v31');
     navigator.serviceWorker.register(swUrl,{updateViaCache:'none'}).then(reg=>reg.update()).catch(err=>console.warn('INK.OS: service worker не зарегистрирован',err));
   }catch(e){}
 }
