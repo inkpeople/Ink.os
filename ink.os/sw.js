@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-finance-refresh-v28';
+const CACHE_NAME = 'ink-os-shell-finance-refresh-v29';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './vk-link.js', './client-retention.js'];
 
 self.addEventListener('install', event => {
