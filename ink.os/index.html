@@ -1615,10 +1615,10 @@ RENDERERS.dashboard=function(){
   const upCard=upcoming?`<div class="up-card" onclick="openDaySummary('${upcoming.date}')"><span class="up-ic" style="--c:${EVENT_TYPES[upcoming.type]?.color||'#8E44AD'}">${icon('clock')}</span><div class="up-time">${upcoming.start||''}<small>${upcoming.date===today?'сегодня':fmtDate(upcoming.date)}</small></div><div class="up-body"><b>${esc(clientOrLabel(upcoming))}</b><div class="dim small">${esc(upcoming.zone||EVENT_TYPES[upcoming.type]?.label||'')}${upH?' · '+(+upH.toFixed(1))+' ч':''}</div></div>${icon('chevron')}</div>`:'<div class="card dim small">Ближайших событий нет</div>';
   $('#content').innerHTML=`
   <div class="dash-head"><h2>${hello}, ${esc(S.settings.ownerName||'Роман')}</h2><div class="dh-date">${dateLine}</div></div>
-  <div class="today-card2" onclick="openDashSheet('today')">
-    <div class="sec-label" style="margin:0">Сегодня</div>
-    <div class="tc-row"><span>${icon('calendar')}<b>${pl(todaysEvents.length,'запись','записи','записей')}</b></span><span>${icon('clients')}<b>${pl(clientsToday,'клиент','клиента','клиентов')}</b></span></div>
-    <div class="tc-row">${icon('clock')}<b>${wh} ч ${wm} мин работы</b></div>
+  <div class="today-card2" onclick="openDashSheet('today')" style="padding:28px 20px!important;min-height:150px!important;display:flex!important;flex-direction:column;justify-content:center;align-items:center;text-align:center;box-sizing:border-box">
+    <div class="sec-label" style="margin:0!important;font-size:15px!important;letter-spacing:.16em">Сегодня</div>
+    <div class="tc-row" style="justify-content:center!important;align-items:center;font-size:18px!important;gap:24px!important;margin-top:16px!important"><span>${icon('calendar')}<b style="font-size:18px!important">${pl(todaysEvents.length,'запись','записи','записей')}</b></span><span>${icon('clients')}<b style="font-size:18px!important">${pl(clientsToday,'клиент','клиента','клиентов')}</b></span></div>
+    <div class="tc-row" style="justify-content:center!important;font-size:18px!important;margin-top:14px!important">${icon('clock')}<b style="font-size:18px!important">${wh} ч ${wm} мин работы</b></div>
   </div>
   ${goalCardHtml()}
   <div class="sec-label">Быстрые действия</div>
