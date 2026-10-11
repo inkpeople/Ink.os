@@ -4138,7 +4138,7 @@ function renderPhotoBody(tab){
     const insecure = !(window.isSecureContext || location.hostname==='localhost');
     const noApi = !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     $('#photoBody').innerHTML=`
-    <p class="small dim">Оценивает яркость и резкость кадра локально в браузере (без интернета). Это не медицинская оценка кожи или заживления.</p>
+    <p class="small dim">INK.OS Photo Coach в реальном времени проверяет освещение, резкость, пересветы/блики, контраст и кадрирование. При разрешении пользователя ИИ дополнительно оценивает текущий кадр и подсказывает, как подготовить фото татуировки для портфолио.</p>
     ${insecure ? `<div class="card card-red" style="margin-bottom:10px"><b>⚠️ Камера недоступна для этого файла</b><div class="small dim" style="margin-top:4px">Браузеры разрешают доступ к камере только для страниц, открытых по адресу https:// или localhost, из соображений безопасности. Файл, открытый напрямую двойным нажатием (file://), доступ к камере получить не может — это ограничение браузера, а не приложения. Используйте кнопку «Выбрать из галереи» ниже — она работает всегда, включая съёмку прямо в моменте через системную камеру телефона.</div></div>` : ''}
     ${(!insecure && noApi) ? `<div class="card card-red" style="margin-bottom:10px"><b>⚠️ Этот браузер не поддерживает доступ к камере</b><div class="small dim" style="margin-top:4px">Используйте кнопку «Выбрать из галереи» — на телефоне она обычно тоже предлагает «Сделать фото».</div></div>` : ''}
     <div class="camera-frame" id="cameraFrame" style="max-width:420px;aspect-ratio:3/4">
@@ -4150,7 +4150,13 @@ function renderPhotoBody(tab){
       <button class="btn btn-primary btn-sm" id="camStartBtn" ${insecure||noApi?'disabled':''}>Включить камеру</button>
       <button class="btn btn-sm" id="camShotBtn" disabled>Снять кадр</button>
     </div>
-    <div id="camScoreWrap" class="small" style="margin-top:8px;max-width:420px"></div>
+    <div class="card" style="margin-top:10px;max-width:420px;padding:12px">
+      <div style="font-weight:700;margin-bottom:6px">✦ INK.OS Photo Coach</div>
+      <div id="camScoreWrap" class="small">Включи камеру — начну проверять кадр.</div>
+      <div style="margin-top:10px"><label for="camZoom">Приближение камеры</label><input id="camZoom" type="range" min="1" max="1" step="0.1" value="1" disabled><div id="camZoomLabel" class="small dim">Зум зависит от возможностей камеры устройства.</div></div>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px"><input type="checkbox" id="camCloudConsent" style="width:auto;margin-top:3px" onchange="photoCoachConsentChanged()"><span>Разрешаю отправлять уменьшенные кадры в облачный ИИ для подсказок по съёмке. Без галочки анализ остаётся на устройстве.</span></label>
+      <div id="camAIStatus" class="small dim" style="margin-top:8px">Облачные подсказки выключены. Локальная оценка работает автоматически.</div>
+    </div>
     <div style="margin-top:10px">
       <label>Выбрать / снять фото из галереи (работает всегда)</label>
       <input type="file" id="galleryInput" accept="image/*" capture="environment">
@@ -4216,6 +4222,7 @@ function wireCamera(){
     try{
       const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
       photoState.cameraStream=stream;
+      setupCameraZoom(stream);
       const v=$('#camVideo'); v.srcObject=stream; v.style.display='block'; $('#camPlaceholder').style.display='none';
       $('#camShotBtn').disabled=false;
       requestAnimationFrame(analyzeFrameLoop);
@@ -4255,30 +4262,75 @@ function wireCamera(){
   };
 }
 function stopCamera(){ if(photoState.cameraStream){ photoState.cameraStream.getTracks().forEach(t=>t.stop()); photoState.cameraStream=null; } }
+let photoCoachState={lastRequest:0,busy:false};
+function setupCameraZoom(stream){
+  const track=stream.getVideoTracks()[0], input=$('#camZoom'), label=$('#camZoomLabel');
+  if(!track||!input)return;
+  let caps={};try{caps=track.getCapabilities?track.getCapabilities():{};}catch(e){}
+  const range=caps.zoom;
+  if(range&&Number(range.max)>Number(range.min)){
+    input.min=String(range.min);input.max=String(range.max);input.step=String(range.step||0.1);
+    const settings=track.getSettings?track.getSettings():{};
+    input.value=String(settings.zoom||range.min);input.disabled=false;
+    if(label)label.textContent='Доступно приближение '+Number(range.min).toFixed(1)+'–'+Number(range.max).toFixed(1)+'×';
+    input.oninput=async function(){try{await track.applyConstraints({advanced:[{zoom:Number(input.value)}]});if(label)label.textContent='Приближение: '+Number(input.value).toFixed(1)+'×';}catch(e){if(label)label.textContent='Изменение зума не поддерживается этой камерой.';}};
+  }else{input.disabled=true;if(label)label.textContent='Браузер не предоставляет управление зумом этой камеры. Используй аппаратные кнопки зума телефона.';}
+}
+function photoCoachConsentChanged(){
+  const status=$('#camAIStatus'), cfg=aiProviderConfig(), consent=$('#camCloudConsent');
+  if(!consent||!consent.checked){if(status)status.textContent='Облачный ИИ выключен. Локальная оценка работает автоматически.';return;}
+  if(!cfg.cloudEnabled||!cfg.openRouterKey){if(status)status.textContent='Сначала настрой OpenRouter: «ИИ-помощник» → «Настроить бесплатные ИИ», сохрани ключ и включи облачный режим.';}
+  else if(status)status.textContent='Облачный ИИ включён: уменьшенный кадр будет отправляться примерно раз в 7 секунд.';
+}
 function analyzeFrameLoop(){
-  const v=$('#camVideo'); const ov=$('#camOverlay');
-  if(!v || v.style.display==='none' || !photoState.cameraStream) return;
-  ov.width=v.clientWidth; ov.height=v.clientHeight;
-  const tmp=document.createElement('canvas'); tmp.width=80; tmp.height=100;
-  const tctx=tmp.getContext('2d'); tctx.drawImage(v,0,0,80,100);
-  let data; try{ data=tctx.getImageData(0,0,80,100).data; }catch(e){ return; }
-  let sum=0,count=0,edgeSum=0;
-  for(let i=0;i<data.length;i+=4){ const l=(data[i]+data[i+1]+data[i+2])/3; sum+=l; count++; }
-  const avg=sum/count; // brightness 0-255
-  // crude sharpness via variance of luminance diff between neighboring samples
-  let variance=0,prev=null,n=0;
-  for(let i=0;i<data.length;i+=16){ const l=(data[i]+data[i+1]+data[i+2])/3; if(prev!==null){ variance+=Math.abs(l-prev); n++; } prev=l; }
-  const sharpness=n?variance/n:0;
-  let score=100, hints=[];
-  if(avg<60){ score-=30; hints.push('Слишком темно — измените свет'); }
-  else if(avg>200){ score-=25; hints.push('Пересвет — уберите блик или уменьшите свет'); }
-  if(sharpness<3){ score-=25; hints.push('Возможна дрожь камеры — держите ровно'); }
-  if(hints.length===0){ hints.push('Кадр выглядит стабильным'); }
-  score=Math.max(0,Math.min(100,score));
-  const frameEl=$('#cameraFrame');
-  frameEl.className='camera-frame '+(score>70?'good':score>40?'warn':'bad');
-  $('#camScoreWrap').innerHTML=`<div>Оценка кадра: <b>${score}/100</b></div><div class="dim">${hints.join(' · ')}</div>`;
+  const v=$('#camVideo'), ov=$('#camOverlay');
+  if(!v||v.style.display==='none'||!photoState.cameraStream||!v.videoWidth)return;
+  if(ov){ov.width=v.clientWidth;ov.height=v.clientHeight;}
+  const tmp=document.createElement('canvas');tmp.width=96;tmp.height=120;
+  const ctx=tmp.getContext('2d',{willReadFrequently:true});ctx.drawImage(v,0,0,96,120);
+  let data;try{data=ctx.getImageData(0,0,96,120).data;}catch(e){requestAnimationFrame(analyzeFrameLoop);return;}
+  let sum=0,sumSq=0,high=0,low=0,count=0;const lum=new Float32Array(96*120);
+  for(let p=0,j=0;p<data.length;p+=4,j++){const l=.2126*data[p]+.7152*data[p+1]+.0722*data[p+2];lum[j]=l;sum+=l;sumSq+=l*l;count++;if(l>245)high++;if(l<25)low++;}
+  const avg=sum/count, contrast=Math.sqrt(Math.max(0,sumSq/count-avg*avg));
+  let edge=0,n=0;for(let y=1;y<119;y++)for(let x=1;x<95;x++){const k=y*96+x;edge+=Math.abs(lum[k]-lum[k-1])+Math.abs(lum[k]-lum[k-96]);n+=2;}
+  const sharp=n?edge/n:0, glare=100*high/count, shadows=100*low/count;
+  let score=100,hints=[];
+  if(avg<65){score-=22;hints.push('Темно — добавь мягкий свет сбоку от камеры.');}
+  else if(avg>205){score-=20;hints.push('Пересвет — снизь мощность света или отодвинь лампу.');}
+  if(glare>2.5){score-=Math.min(25,Math.round(glare*2));hints.push('Есть яркие блики — смести источник света в сторону и немного измени угол кожи.');}
+  if(sharp<5){score-=22;hints.push('Мало деталей или смаз — зафиксируй телефон и наведи фокус на татуировку.');}
+  if(contrast<24){score-=10;hints.push('Кадр плоский — добавь направленный мягкий свет, сохрани детали в тенях.');}
+  if(shadows>12){score-=8;hints.push('Тени слишком тёмные — добавь заполняющий свет.');}
+  score=Math.max(0,score);
+  const frame=$('#cameraFrame');if(frame)frame.className='camera-frame '+(score>75?'good':score>45?'warn':'bad');
+  const track=photoState.cameraStream.getVideoTracks()[0], settings=track&&track.getSettings?track.getSettings():{};
+  const zoomText=settings.zoom?' · зум '+Number(settings.zoom).toFixed(1)+'×':'';
+  const wrap=$('#camScoreWrap');
+  if(wrap)wrap.innerHTML='<div>Готовность кадра: <b>'+score+'/100</b>'+zoomText+'</div><div class="dim" style="margin-top:4px">Освещение: '+Math.round(avg)+'/255 · контраст: '+Math.round(contrast)+' · потенциальные блики: '+glare.toFixed(1)+'% · детализация: '+sharp.toFixed(1)+'</div><div style="margin-top:6px">'+(hints.length?hints.join(' '):'Свет и детализация выглядят приемлемо. Проверь, что вся татуировка в кадре и фон не отвлекает.')+'</div><div id="camAIAdvice" style="margin-top:8px"></div>';
+  const cfg=aiProviderConfig(), consent=$('#camCloudConsent'), status=$('#camAIStatus');
+  if(consent&&consent.checked&&cfg.cloudEnabled&&cfg.openRouterKey){
+    if(!photoCoachState.busy&&Date.now()-photoCoachState.lastRequest>7000){photoCoachState.lastRequest=Date.now();analyzeCameraFrameWithAI(tmp.toDataURL('image/jpeg',0.5),{avg:avg,contrast:contrast,glare:glare,sharp:sharp,score:score,hints:hints});}
+  }else if(consent&&consent.checked&&status){status.textContent='Облачный ИИ не настроен. Проверь настройки OpenRouter; локальная оценка работает.';}
   requestAnimationFrame(analyzeFrameLoop);
+}
+async function analyzeCameraFrameWithAI(frameData,m){
+  if(photoCoachState.busy)return;
+  const cfg=aiProviderConfig();if(!cfg.cloudEnabled||!cfg.openRouterKey)return;
+  photoCoachState.busy=true;const status=$('#camAIStatus');
+  try{
+    const prompt='Ты — ИИ-фотограф для портфолио тату-мастера. Посмотри на текущий кадр и дай 1–3 коротких действия, которые помогут улучшить снимок прямо сейчас. Оцени кадрирование, угол камеры, отражения/блики на коже, направление и равномерность света, резкость/смаз, читаемость татуировки и лишний фон. Не выдумывай точное расстояние или оптический зум. Метрики браузера: яркость '+Math.round(m.avg)+'/255, контраст '+Math.round(m.contrast)+', потенциальные пересветы '+m.glare.toFixed(1)+'%, детализация '+m.sharp.toFixed(1)+', оценка '+m.score+'/100. Локальные замечания: '+m.hints.join(' ')+' Отвечай по-русски, кратко и практично.';
+    const models=['qwen/qwen2.5-vl-32b-instruct:free','google/gemma-3-27b-it:free'];let answer='';
+    for(const model of models){
+      try{
+        const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.openRouterKey,'HTTP-Referer':location.origin,'X-Title':'INK.OS Photo Coach'},body:JSON.stringify({model:model,messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:frameData}}]}],temperature:0.2,max_tokens:220})});
+        const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error('HTTP '+res.status);
+        answer=String(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content||'').trim();if(answer)break;
+      }catch(e){console.warn('INK.OS Photo Coach model failed',model,e);}
+    }
+    if(answer){const advice=$('#camAIAdvice');if(advice)advice.innerHTML='<b>Совет ИИ:</b> '+esc(answer).replace(/\n/g,'<br>');if(status)status.textContent='ИИ обновил рекомендации. Следующая проверка примерно через 7 секунд.';}
+    else if(status)status.textContent='ИИ-модели сейчас не ответили. Локальные измерения продолжают работать.';
+  }catch(e){console.warn('INK.OS Photo Coach error',e);if(status)status.textContent='Не удалось получить совет ИИ. Проверь интернет и настройки OpenRouter.';}
+  finally{photoCoachState.busy=false;}
 }
 /* --- Photo editor --- */
 function handleEditFile(e){
