@@ -1905,6 +1905,14 @@ function autoClientAvatarUrl(c){
   const sources=[
     ['vk',c.vk],['instagram',c.instagram],['telegram',c.telegram]
   ];
+  const profile=String(c.profileLink||'').trim();
+  if(/^https?:\/\//i.test(profile)){
+    try{
+      const host=new URL(profile).hostname.replace(/^www\./,'').toLowerCase();
+      const provider=host==='vk.com'||host==='m.vk.com'?'vk':host==='instagram.com'?'instagram':host==='t.me'||host==='telegram.me'?'telegram':'';
+      if(provider) sources.unshift([provider,profile]);
+    }catch(_){}
+  }
   for(const [provider,value] of sources){
     const raw=String(value||'').trim();
     if(!raw) continue;
