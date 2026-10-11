@@ -3648,30 +3648,30 @@ RENDERERS.finance=function(){
     <button class="btn btn-primary btn-icon btn-sm" onclick="openFinanceForm()">${icon('plus')}</button>
   </div>
   <section class="finance-premium-summary">
-    <div class="finance-summary-top"><div><div class="finance-eyebrow">ТЕКУЩИЙ МЕСЯЦ · ${MON[now.getMonth()]} ${now.getFullYear()}</div><div class="finance-summary-total">${finVal(fmtMoney(monthIncome))}</div><div class="finance-summary-caption">Фактически записанный доход за месяц</div></div><div class="finance-summary-mark">₽</div></div>
+    <div class="finance-summary-top"><div><div class="finance-eyebrow">ТЕКУЩИЙ МЕСЯЦ · ${MON[now.getMonth()]} ${now.getFullYear()}</div><div class="finance-summary-total">${finVal(fmtMoney(monthIncome))}</div><div class="finance-summary-caption">Получено по сохранённым финансовым операциям · будущие записи не включены</div></div><div class="finance-summary-mark">₽</div></div>
     <div class="finance-summary-grid">
       <div class="finance-stat"><span>Рабочие расходы</span><b>${finVal(fmtMoney(monthExpense))}</b><small>за текущий месяц</small></div>
       <div class="finance-stat"><span>Остаток после расходов и налога</span><b>${finVal(fmtMoney(monthNet))}</b><small>налог рассчитан по ставке ${taxRate}%</small></div>
       <div class="finance-stat"><span>Заработано за год</span><b>${finVal(fmtMoney(yearIncome))}</b><small>${now.getFullYear()} год</small></div>
       <div class="finance-stat"><span>Расходы за год</span><b>${finVal(fmtMoney(yearExpense))}</b><small>${now.getFullYear()} год</small></div>
-      <div class="finance-stat"><span>Средний чек</span><b>${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small>${completedMonthEvents.length} завершённых сеансов с ценой</small></div>
-      <div class="finance-stat"><span>До месячной цели</span><b>${monthlyGoal?(monthRemaining?finVal(fmtMoney(monthRemaining)):'Цель достигнута'):'Не задана'}</b><small>${monthlyGoal?'Цель: '+fmtMoney(monthlyGoal):'Задайте цель в настройках ниже'}</small></div>
+      <div class="finance-stat"><span>Средний чек за месяц</span><b>${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small>${completedMonthEvents.length?completedMonthEvents.length+' завершённых сеансов с указанной ценой':'Нет завершённых сеансов с ценой'}</small></div>
+      <div class="finance-stat"><span>Осталось до цели</span><b>${monthlyGoal?(monthRemaining?finVal(fmtMoney(monthRemaining)):'Цель достигнута'):'Цель не задана'}</b><small>${monthlyGoal?'Месячная цель: '+fmtMoney(monthlyGoal):'Нажмите «Настроить цель и налог»'}</small></div>
     </div>
     ${monthlyGoal?`<div class="finance-goal-row"><div><span>Выполнение месячной цели</span><b>${monthProgress}%</b></div><div class="finance-goal-track"><div style="width:${monthProgress}%"></div></div></div>`:''}
     <div class="finance-summary-foot"><span>Расчётный налог: <b>${finVal(fmtMoney(monthTax))}</b></span><span>Доход минус расходы: <b>${finVal(fmtMoney(monthIncome-monthExpense))}</b></span></div>
     <div class="finance-summary-actions"><button class="btn btn-sm" onclick="openFinanceGoalSettings()">Настроить цель и налог</button><button class="btn btn-sm" onclick="exportCSV('finance')">Экспорт операций</button></div>
   </section>
-  <div class="fin-pair">
-    <div class="fin-card inc">${icon('coin')}<div class="fl">Доход</div><div class="fv">${finVal(fmtMoney(income))}</div></div>
-    <div class="fin-card exp">${icon('reports')}<div class="fl">Расходы</div><div class="fv">${finVal(fmtMoney(expense))}</div></div>
-  </div>
+  ${financePeriod!=='month'?`<div class="fin-pair finance-period-pair">
+    <div class="fin-card inc">${icon('coin')}<div class="fl">Доход за выбранный период</div><div class="fv">${finVal(fmtMoney(income))}</div></div>
+    <div class="fin-card exp">${icon('reports')}<div class="fl">Расходы за выбранный период</div><div class="fv">${finVal(fmtMoney(expense))}</div></div>
+  </div>`:''}
   ${financePeriod!=='all'?`<div class="fin-forecast" onclick="openForecastSheet()">
     <div><div class="fl">Ещё заработаю ${fcLabel}</div><div class="fv">+${finVal(fmtMoney(fcExpected))}</div><div class="small dim">${fcList.length?fcList.length+' '+financePlural(fcList.length,'запись','записи','записей')+' с неоплаченным остатком':'Нет предстоящих записей с остатком'}</div></div>
     <div class="tot"><div class="fl">Итого за период</div><div class="fv">${finVal(fmtMoney(income+fcExpected))}</div><div class="small dim">с учётом прогноза</div></div>
   </div>`:''}
   <div class="segmented" style="margin-bottom:14px">${['day','week','month','quarter','year','all'].map(p=>`<button class="${financePeriod===p?'active':''}" onclick="setFinPeriod('${p}')">${{day:'День',week:'Неделя',month:'Месяц',quarter:'Квартал',year:'Год',all:'Всё'}[p]}</button>`).join('')}</div>
   <div class="card" style="margin-bottom:14px">
-    <div class="sec-label" style="margin:0">Прибыль</div><div class="profit">${finVal(fmtMoney(income-expense))}</div><div class="small dim" style="margin-bottom:4px">График: доход, ${(S.settings.currency||'₽')}</div>
+    <div class="sec-label" style="margin:0">Прибыль за выбранный период</div><div class="profit">${finVal(fmtMoney(income-expense))}</div><div class="small dim" style="margin-bottom:4px">Доход минус расходы · график в ${(S.settings.currency||'₽')}</div>
     ${S.settings.hideFinance? '<p class="dim small" style="padding:40px 0;text-align:center">График скрыт (Настройки → Безопасность)</p>' : '<canvas id="finMainChart" style="width:100%;height:170px"></canvas>'}
   </div>
   <div class="grid grid-2" style="margin-bottom:8px">
@@ -6069,6 +6069,12 @@ tr:hover{background:rgba(180,154,106,.045)}
 .finance-summary-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
 .finance-summary-actions .btn{border-color:rgba(198,163,98,.25)}
 @media(max-width:360px){.finance-premium-summary{padding:13px}.finance-summary-grid{gap:6px}.finance-stat{padding:9px}.finance-stat span{font-size:9px}}
+
+/* Finance clarity refinements */
+.finance-summary-caption{max-width:430px;line-height:1.5}
+.finance-summary-actions .btn{min-height:36px}
+.finance-period-pair .fl{font-size:11px;line-height:1.4}
+@media(max-width:390px){.finance-summary-foot{display:grid;grid-template-columns:1fr;gap:5px}.finance-summary-actions .btn{flex:1 1 100%}}
 </style>
 </body>
 </html>
