@@ -46,7 +46,7 @@
   };
   let activeClientId=null;
   function injectVkButton(){
-    if(!activeClientId)return;
+    return; // The client profile already renders its own VK button.
     const area=document.querySelector('#modalBody .cl-actions, .modal-body .cl-actions, .cl-actions');
     if(!area||area.querySelector('[data-vk-link-button]'))return;
     const b=document.createElement('button');
