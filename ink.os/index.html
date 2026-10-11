@@ -3596,7 +3596,7 @@ function openFinChart(){
 function financeScope(f){
   if(!f || typeof f!=='object') return false;
   if(financePeriod==='all') return true;
-  if(typeof f.date!=='string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(f.date)) return false;
+  if(typeof f.date!=='string' || !/^\d{4}-\d{2}-\d{2}$/.test(f.date)) return false;
   const range=periodRangeISO(financePeriod,0);
   return f.date>=range.start && f.date<=range.end;
 }
