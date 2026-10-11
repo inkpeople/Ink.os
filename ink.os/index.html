@@ -1863,20 +1863,37 @@ function renderClientsList(){
       <div class="small dim" style="margin-top:4px">Визитов: ${c.visits||0} · Сумма: ${fmtMoney(c.totalSum)} · Последний визит: ${fmtDate(c.lastVisit)}</div>
     </div>`).join('') : '<p class="dim">Клиенты не найдены.</p>';
 }
-function normalizeClientLink(value){
+function normalizeClientLink(value,provider){
   let raw=String(value||'').trim().toLowerCase();
   if(!raw) return '';
-  raw=raw.replace(/^@/,'').replace(/[?#].*$/,'').replace(/\/$/,'');
+  raw=raw.replace(/[?#].*$/,'').replace(/\/$/,'');
+  const aliases={vk:['vk.com','m.vk.com'],instagram:['instagram.com'],telegram:['t.me','telegram.me'],max:['max.ru','web.max.ru']};
   try{
-    const u=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw);
+    const hasScheme=/^https?:\/\//i.test(raw);
+    const u=new URL(hasScheme?raw:'https://'+raw);
     const host=u.hostname.replace(/^www\./,'');
-    const path=u.pathname.replace(/\/+$/,'');
+    const path=u.pathname.split('/').filter(Boolean).join('/');
+    const matched=Object.keys(aliases).find(p=>aliases[p].includes(host));
+    if(matched) return matched+':'+(path.split('/')[0]||'').replace(/^@/,'');
+    if(provider && !hasScheme && !raw.includes('/')){
+      const username=raw.replace(/^@/,'');
+      if(username) return provider+':'+username;
+    }
     return (host+'/'+path).replace(/\/$/,'');
-  }catch(_){ return raw.replace(/\s+/g,''); }
+  }catch(_){
+    raw=raw.replace(/^@/,'').replace(/\s+/g,'');
+    return provider&&raw?provider+':'+raw:raw;
+  }
 }
 function clientProfileValues(c){
-  return [c&&c.profileLink,c&&c.vk,c&&c.instagram,c&&c.telegram,c&&c.max,c&&c.whatsapp]
-    .map(normalizeClientLink).filter(Boolean);
+  return [
+    normalizeClientLink(c&&c.profileLink),
+    normalizeClientLink(c&&c.vk,'vk'),
+    normalizeClientLink(c&&c.instagram,'instagram'),
+    normalizeClientLink(c&&c.telegram,'telegram'),
+    normalizeClientLink(c&&c.max,'max'),
+    normalizeClientLink(c&&c.whatsapp,'whatsapp')
+  ].filter(Boolean);
 }
 function findClientByProfileLink(value){
   const key=normalizeClientLink(value);
