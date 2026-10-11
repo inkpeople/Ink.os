@@ -1420,7 +1420,7 @@ let splashDataReady=false;
 let splashFinishRequested=false;
 function runSplash(){
   const st=S.settings||{};
-  if(st.splash==='off'){ finishSplash(); return; }
+  // Always show the branded startup screen; stale local settings must not skip it.
   const sp=$('#splash'), short=st.splash==='short';
   sp.classList.toggle('short',short);
   requestAnimationFrame(()=>sp.classList.add('play'));
