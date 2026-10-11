@@ -3647,19 +3647,14 @@ RENDERERS.finance=function(){
     <div><h2 style="margin:0">Финансы</h2><div class="small dim">Реальные операции и прогноз поступлений</div></div>
     <button class="btn btn-primary btn-icon btn-sm" onclick="openFinanceForm()">${icon('plus')}</button>
   </div>
-  <section class="finance-premium-summary">
-    <div class="finance-summary-top"><div><div class="finance-eyebrow">ТЕКУЩИЙ МЕСЯЦ · ${MON[now.getMonth()]} ${now.getFullYear()}</div><div class="finance-summary-total">${finVal(fmtMoney(monthIncome))}</div><div class="finance-summary-caption">Получено по сохранённым финансовым операциям · будущие записи не включены</div></div><div class="finance-summary-mark">₽</div></div>
+  <section class="finance-premium-summary finance-summary-compact">
+    <div class="finance-summary-top"><div><div class="finance-eyebrow">ФИНАНСЫ · ${MON[now.getMonth()]} ${now.getFullYear()}</div><div class="finance-summary-caption">Ключевые показатели студии</div></div><div class="finance-summary-mark">₽</div></div>
     <div class="finance-summary-grid">
-      <div class="finance-stat"><span>Рабочие расходы</span><b>${finVal(fmtMoney(monthExpense))}</b><small>за текущий месяц</small></div>
-      <div class="finance-stat"><span>Остаток после расходов и налога</span><b>${finVal(fmtMoney(monthNet))}</b><small>налог рассчитан по ставке ${taxRate}%</small></div>
-      <div class="finance-stat"><span>Заработано за год</span><b>${finVal(fmtMoney(yearIncome))}</b><small>${now.getFullYear()} год</small></div>
-      <div class="finance-stat"><span>Расходы за год</span><b>${finVal(fmtMoney(yearExpense))}</b><small>${now.getFullYear()} год</small></div>
-      <div class="finance-stat"><span>Средний чек за месяц</span><b>${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small>${completedMonthEvents.length?completedMonthEvents.length+' завершённых сеансов с указанной ценой':'Нет завершённых сеансов с ценой'}</small></div>
-      <div class="finance-stat"><span>Осталось до цели</span><b>${monthlyGoal?(monthRemaining?finVal(fmtMoney(monthRemaining)):'Цель достигнута'):'Цель не задана'}</b><small>${monthlyGoal?'Месячная цель: '+fmtMoney(monthlyGoal):'Нажмите «Настроить цель и налог»'}</small></div>
+      <div class="finance-stat"><span>Доход за месяц</span><b>${finVal(fmtMoney(monthIncome))}</b></div>
+      <div class="finance-stat"><span>Расход за месяц</span><b>${finVal(fmtMoney(monthExpense))}</b></div>
+      <div class="finance-stat"><span>Доход за год</span><b>${finVal(fmtMoney(yearIncome))}</b><small>${now.getFullYear()} год</small></div>
+      <div class="finance-stat"><span>Средний чек за месяц</span><b>${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small>${completedMonthEvents.length?completedMonthEvents.length+' завершённых сеансов':'Нет завершённых сеансов с ценой'}</small></div>
     </div>
-    ${monthlyGoal?`<div class="finance-goal-row"><div><span>Выполнение месячной цели</span><b>${monthProgress}%</b></div><div class="finance-goal-track"><div style="width:${monthProgress}%"></div></div></div>`:''}
-    <div class="finance-summary-foot"><span>Расчётный налог: <b>${finVal(fmtMoney(monthTax))}</b></span><span>Доход минус расходы: <b>${finVal(fmtMoney(monthIncome-monthExpense))}</b></span></div>
-    <div class="finance-summary-actions"><button class="btn btn-sm" onclick="openFinanceGoalSettings()">Настроить цель и налог</button><button class="btn btn-sm" onclick="exportCSV('finance')">Экспорт операций</button></div>
   </section>
   ${financePeriod!=='month'?`<div class="fin-pair finance-period-pair">
     <div class="fin-card inc">${icon('coin')}<div class="fl">Доход за выбранный период</div><div class="fv">${finVal(fmtMoney(income))}</div></div>
