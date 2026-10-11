@@ -4284,7 +4284,8 @@ function photoCoachConsentChanged(){
 }
 function analyzeFrameLoop(){
   const v=$('#camVideo'), ov=$('#camOverlay');
-  if(!v||v.style.display==='none'||!photoState.cameraStream)return;\n  if(!v.videoWidth){requestAnimationFrame(analyzeFrameLoop);return;}
+  if(!v||v.style.display==='none'||!photoState.cameraStream)return;
+  if(!v.videoWidth){requestAnimationFrame(analyzeFrameLoop);return;}
   if(ov){ov.width=v.clientWidth;ov.height=v.clientHeight;}
   const tmp=document.createElement('canvas');tmp.width=96;tmp.height=120;
   const ctx=tmp.getContext('2d',{willReadFrequently:true});ctx.drawImage(v,0,0,96,120);
