@@ -1966,7 +1966,7 @@ function openClientForm(existing){
       <button type="button" class="btn btn-secondary" id="generateTelegramLink">Создать ссылку привязки Telegram</button>
       <button type="button" class="btn btn-secondary" id="copyTelegramLink" disabled>Копировать ссылку Telegram</button>
     </div>
-    <input type="text" id="telegramLinkPreview" readonly value="${c.telegramLinkToken?'https://t.me/Ramzestattoo_bot?start=link_'+esc(c.telegramLinkToken):''}" placeholder="Персональная ссылка Telegram">
+    <input type="text" id="telegramLinkPreview" readonly value="${c.telegramLinkToken?'https://t.me/Ramzestattoo_bot?start=link_'+esc(c.telegramLinkToken):''}" aria-label="Персональная ссылка Telegram" style="display:none">
     <input type="hidden" id="telegramLinkTokenField" name="telegramLinkToken" value="${esc(c.telegramLinkToken||'')}">
     <div class="field-row" style="margin-top:10px">
       <button type="button" class="btn btn-secondary" id="checkVkExisting">Проверить существующий диалог</button>
@@ -1974,10 +1974,10 @@ function openClientForm(existing){
       <button type="button" class="btn btn-secondary" id="copyVkLink" disabled>Копировать ссылку ВК</button>
       <button type="button" class="btn btn-secondary" id="copyVkCode" disabled>Копировать код</button>
     </div>
-    <input type="text" id="vkLinkPreview" readonly placeholder="Ссылка на диалог сообщества ВКонтакте">
-    <input type="text" id="vkLinkCodePreview" readonly placeholder="Персональный код для отправки в диалог">
+    <input type="text" id="vkLinkPreview" readonly aria-label="Ссылка на диалог сообщества ВКонтакте" style="display:none">
+    <input type="text" id="vkLinkCodePreview" readonly aria-label="Персональный код для отправки в диалог" style="display:none">
     <input type="hidden" id="vkLinkTokenField" name="vkLinkToken" value="${esc(c.vkLinkToken||'')}">
-    <p class="small dim" style="margin:8px 0 0">Сначала проверь существующий диалог. Если найдено однозначное совпадение по имени, INK.OS привяжет Peer ID. Если найти нельзя, используй код: клиент отправляет его в сообщения сообщества. Согласие на напоминания хранится отдельно.</p>
+
   </div>
   <label>Другая ссылка на профиль</label><input name="profileLink" value="${esc(c.profileLink)}">
   <div class="field-row">
