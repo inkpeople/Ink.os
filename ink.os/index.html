@@ -4110,149 +4110,55 @@ function buildIncomeSeries(startISO,endISO,granularity){
   return points;
 }
 RENDERERS.finance=function(){
-  try {
-  // Normalize records imported from older backups before reading finance analytics.
-  S.finance=Array.isArray(S.finance)?S.finance.filter(f=>f&&typeof f==='object'):[];
-  S.events=Array.isArray(S.events)?S.events.filter(e=>e&&typeof e==='object'):[];
-  S.clients=Array.isArray(S.clients)?S.clients.filter(c=>c&&typeof c==='object'):[];
-  S.payments=Array.isArray(S.payments)?S.payments.filter(p=>p&&typeof p==='object'):[];
-  S.settings=S.settings&&typeof S.settings==='object'?S.settings:defaultSettings();
-  const items=S.finance.filter(f=>financeScope(f));
-  const incomeEntries=financeIncomeEntries();
-  const income=incomeEntries.filter(f=>financeScope(f)).reduce((s,f)=>s+Number(f.amount||0),0);
-  const expense=items.filter(f=>f.type==='expense').reduce((s,f)=>s+Number(f.amount||0),0);
-  const now=new Date();
-  const monthKey=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const yearKey=String(now.getFullYear());
-  const monthIncome=incomeEntries.filter(f=>(f.date||'').startsWith(monthKey)).reduce((a,f)=>a+Number(f.amount||0),0);
-  const monthExpense=S.finance.filter(f=>f.type==='expense'&&(f.date||'').startsWith(monthKey)).reduce((a,f)=>a+Number(f.amount||0),0);
-  const yearIncome=incomeEntries.filter(f=>(f.date||'').startsWith(yearKey)).reduce((a,f)=>a+Number(f.amount||0),0);
-  const yearExpense=S.finance.filter(f=>f.type==='expense'&&(f.date||'').startsWith(yearKey)).reduce((a,f)=>a+Number(f.amount||0),0);
-  const monthlyGoal=Math.max(0,Number(S.settings.monthGoal||0));
-  const taxRate=Math.max(0,Math.min(100,Number(S.settings.taxRate||0)));
-  const monthRemaining=monthlyGoal?Math.max(0,monthlyGoal-monthIncome):0;
-  const monthProgress=monthlyGoal?Math.min(100,Math.round(monthIncome/monthlyGoal*100)):0;
-  const billableFinanceTypes=['session','consult','correction','model'];
-  const completedMonthEvents=S.events.filter(e=>e.status==='completed'&&(e.date||'').startsWith(monthKey)&&billableFinanceTypes.includes(e.type)&&Number(e.cost||0)>0);
-  const monthAvgCheck=completedMonthEvents.length?Math.round(completedMonthEvents.reduce((a,e)=>a+Number(e.cost||0),0)/completedMonthEvents.length):0;
-  const monthTax=monthIncome*taxRate/100;
-  const monthNet=monthIncome-monthExpense-monthTax;
-  window._finItems=items;
-
-  const {start,end}=periodRangeISO(financePeriod,0);
-  const prevRange=periodRangeISO(financePeriod,-1);
-  const periodEvts=S.events.filter(e=>e.date>=start&&e.date<=end);
-  const prevEvts=S.events.filter(e=>e.date>=prevRange.start&&e.date<=prevRange.end);
-  const recordsCount=periodEvts.length;
-  const prevRecordsCount=prevEvts.length;
-  const pricedCompletedPeriodEvents=periodEvts.filter(e=>e.status==='completed'&&billableFinanceTypes.includes(e.type)&&Number(e.cost||0)>0);
-  const avgCheck=pricedCompletedPeriodEvents.length?Math.round(pricedCompletedPeriodEvents.reduce((sum,e)=>sum+Number(e.cost||0),0)/pricedCompletedPeriodEvents.length):0;
-
-  const newClients=S.clients.filter(c=>c.firstVisit && c.firstVisit>=start && c.firstVisit<=end).length;
-  const prevNewClients=S.clients.filter(c=>c.firstVisit && c.firstVisit>=prevRange.start && c.firstVisit<=prevRange.end).length;
-  const repeatClientIds=new Set(periodEvts.filter(e=>{ const c=S.clients.find(x=>x.id===e.clientId); return c && (c.visits||0)>1; }).map(e=>e.clientId));
-  const prevRepeatClientIds=new Set(prevEvts.filter(e=>{ const c=S.clients.find(x=>x.id===e.clientId); return c && (c.visits||0)>1; }).map(e=>e.clientId));
-  const cancelled=periodEvts.filter(e=>e.status==='cancelled').length;
-  const prevCancelled=prevEvts.filter(e=>e.status==='cancelled').length;
-  const noshow=periodEvts.filter(e=>e.status==='noshow').length;
-  const prevNoshow=prevEvts.filter(e=>e.status==='noshow').length;
-  const workHours=periodEvts.filter(e=>['session','consult','correction','model'].includes(e.type)).reduce((s,e)=>s+eventHours(e),0);
-  const fcToday=todayISO();
-  const fcList=financePeriod==='all'?[]:periodEvts.filter(e=>!['completed','cancelled','noshow'].includes(e.status)&&e.date>=fcToday&&Number(e.cost||0)>0).map(e=>{
-    const paid=S.payments.filter(p=>p.eventId===e.id).reduce((a,p)=>a+Number(p.amount||0),0);
-    return {e,rest:Math.max(0,Number(e.cost||0)-Number(e.bookingAmount||0)-paid)};
-  }).filter(x=>x.rest>0).sort((a,b)=>(a.e.date+(a.e.start||'')).localeCompare(b.e.date+(b.e.start||'')));
-  const fcExpected=fcList.reduce((s,x)=>s+x.rest,0);
-  window._finForecast=fcList;
-  const fcLabel={day:'сегодня',week:'до конца недели',month:'до конца месяца',quarter:'до конца квартала',year:'до конца года'}[financePeriod]||'';
-
-  const granularity = financePeriod==='year' ? 'month' : financePeriod==='quarter' ? 'week' : 'day';
-  const seriesRange = financePeriod==='all' ? periodRangeISO('year',0) : {start,end};
-  const chartPoints=buildIncomeSeries(seriesRange.start,seriesRange.end,granularity);
-
-  $('#content').innerHTML=`
-  <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
-    <div><h2 style="margin:0">Финансы</h2><div class="small dim">Реальные операции и прогноз поступлений</div></div>
-    <button class="btn btn-secondary btn-sm" onclick="openFinanceDiagnostics()">Проверить расчёт</button><button class="btn btn-primary btn-sm" onclick="calculateFinanceMonth()">Рассчитать месяц</button><button class="btn btn-primary btn-icon btn-sm" onclick="openFinanceForm()">${icon('plus')}</button>
-  </div>
-  <section class="finance-premium-summary finance-summary-compact">
-    <div class="finance-summary-top">
-      <div>
-        <div class="finance-eyebrow">ТЕКУЩИЙ МЕСЯЦ · ${MON[now.getMonth()]} ${now.getFullYear()}</div>
-        <div id="finance-month-income-value" class="finance-summary-total">${finVal(fmtMoney(monthIncome))}</div>
-        <div class="finance-summary-caption">Фактически записанный доход за месяц</div>
-      </div>
-      <div class="finance-summary-mark">₽</div>
-    </div>
-    <div class="finance-summary-grid">
-      <div class="finance-stat"><span>Рабочие расходы</span><b id="finance-month-expense-value">${finVal(fmtMoney(monthExpense))}</b><small>За текущий месяц</small></div>
-      <div class="finance-stat finance-stat-net"><span>Остаток после расходов и налога</span><b id="finance-month-net-value">${finVal(fmtMoney(monthNet))}</b><small>Налог рассчитан по ставке ${taxRate}%</small></div>
-      <div class="finance-stat"><span>Заработано за год</span><b id="finance-year-income-value">${finVal(fmtMoney(yearIncome))}</b><small>${now.getFullYear()} год</small></div>
-      <div class="finance-stat"><span>Расходы за год</span><b id="finance-year-expense-value">${finVal(fmtMoney(yearExpense))}</b><small>${now.getFullYear()} год</small></div>
-      <div class="finance-stat"><span>Средний чек</span><b id="finance-month-average-value">${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small id="finance-month-average-caption">${completedMonthEvents.length?completedMonthEvents.length+' завершённых сеансов с ценой':'Нет завершённых сеансов с ценой'}</small></div>
-      <div class="finance-stat"><span>До месячной цели</span><b>${monthlyGoal?finVal(fmtMoney(monthRemaining)):'Не задана'}</b><small>${monthlyGoal?'Выполнено '+monthProgress+'% цели':'Задайте цель в настройках ниже'}</small>${monthlyGoal?'<div class="finance-goal-track" style="margin-top:8px"><div style="width:'+monthProgress+'%"></div></div>':''}</div>
-    </div>
-    <div class="finance-summary-foot">
-      <span>Расчётный налог: <b id="finance-month-tax-value">${finVal(fmtMoney(monthTax))}</b></span>
-      <span>Доход минус расходы: <b id="finance-month-profit-value">${finVal(fmtMoney(monthIncome-monthExpense))}</b></span>
-    </div>
-  </section>
-  ${financePeriod!=='month'?`<div class="fin-pair finance-period-pair">
-    <div class="fin-card inc">${icon('coin')}<div class="fl">Доход за выбранный период</div><div class="fv">${finVal(fmtMoney(income))}</div></div>
-    <div class="fin-card exp">${icon('reports')}<div class="fl">Расходы за выбранный период</div><div class="fv">${finVal(fmtMoney(expense))}</div></div>
-  </div>`:''}
-  ${financePeriod!=='all'?`<div class="fin-forecast" onclick="openForecastSheet()">
-    <div><div class="fl">Ещё заработаю ${fcLabel}</div><div id="finance-forecast-value" class="fv">+${finVal(fmtMoney(fcExpected))}</div><div id="finance-forecast-count" class="small dim">${fcList.length?fcList.length+' '+financePlural(fcList.length,'запись','записи','записей')+' с неоплаченным остатком':'Нет предстоящих записей с остатком'}</div></div>
-    <div class="tot"><div class="fl">Итого за период</div><div id="finance-period-total-value" class="fv">${finVal(fmtMoney(income+fcExpected))}</div><div class="small dim">с учётом прогноза</div></div>
-  </div>`:''}
-  <div class="segmented" style="margin-bottom:14px">${['day','week','month','quarter','year','all'].map(p=>`<button class="${financePeriod===p?'active':''}" onclick="setFinPeriod('${p}')">${{day:'День',week:'Неделя',month:'Месяц',quarter:'Квартал',year:'Год',all:'Всё'}[p]}</button>`).join('')}</div>
-  <div class="card" style="margin-bottom:14px">
-    <div class="sec-label" style="margin:0">Прибыль за выбранный период</div><div class="profit">${finVal(fmtMoney(income-expense))}</div><div class="small dim" style="margin-bottom:4px">Доход минус расходы · график в ${(S.settings.currency||'₽')}</div>
-    ${S.settings.hideFinance? '<p class="dim small" style="padding:40px 0;text-align:center">График скрыт (Настройки → Безопасность)</p>' : '<canvas id="finMainChart" style="width:100%;height:170px"></canvas>'}
-  </div>
-  <div class="grid grid-2" style="margin-bottom:8px">
-    <div class="analytics-card">
-      <div class="ic-wrap">${icon('clientAdd')}</div>
-      <div class="body"><div class="l">Новые клиенты</div><div class="n">${newClients} ${trendHtml(pctChange(newClients,prevNewClients))}</div></div>
-    </div>
-    <div class="analytics-card">
-      <div class="ic-wrap">${icon('repeat')}</div>
-      <div class="body"><div class="l">Повторные клиенты</div><div class="n">${repeatClientIds.size} ${trendHtml(pctChange(repeatClientIds.size,prevRepeatClientIds.size))}</div></div>
-    </div>
-    <div class="analytics-card">
-      <div class="ic-wrap">${icon('close')}</div>
-      <div class="body"><div class="l">Отмены</div><div class="n">${cancelled} ${trendHtml(pctChange(cancelled,prevCancelled))}</div></div>
-    </div>
-    <div class="analytics-card">
-      <div class="ic-wrap">${icon('close')}</div>
-      <div class="body"><div class="l">Неявки</div><div class="n">${noshow} ${trendHtml(pctChange(noshow,prevNoshow))}</div></div>
-    </div>
-    <div class="analytics-card">
-      <div class="ic-wrap">${icon('clock')}</div>
-      <div class="body"><div class="l">Часы работы</div><div class="n">${workHours.toFixed(1)}ч</div></div>
-    </div>
-  </div>
-  <div class="tile-grid" style="margin:14px 0">
-    <div class="tile" onclick="openFinCategories()">${icon('reports','ic')}<span>Категории</span></div>
-    <div class="tile" onclick="openFinOperations()">${icon('data','ic')}<span>Операции (${items.length})</span></div>
-    <div class="tile" onclick="openFinChart()">${icon('chart','ic')}<span>По категориям</span></div>
-    <div class="tile" onclick="exportCSV('finance')">${icon('edit','ic')}<span>Экспорт</span></div>
-  </div>
-  <p class="small dim">* В доход не входят расходные материалы (картриджи, пигменты, бумага и т.д.) и зарплаты мастеров. Изменение % — по сравнению с предыдущим таким же периодом.</p>`;
-  if(!S.settings.hideFinance) setTimeout(()=>drawLineChart($('#finMainChart'),chartPoints),20);
-  } catch(err) {
+  try{
+    S.finance=Array.isArray(S.finance)?S.finance.filter(f=>f&&typeof f==='object'):[];
+    S.events=Array.isArray(S.events)?S.events.filter(e=>e&&typeof e==='object'):[];
+    S.clients=Array.isArray(S.clients)?S.clients.filter(c=>c&&typeof c==='object'):[];
+    S.payments=Array.isArray(S.payments)?S.payments.filter(p=>p&&typeof p==='object'):[];
+    S.settings=S.settings&&typeof S.settings==='object'?S.settings:defaultSettings();
+    const now=new Date(), monthKey=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'), yearKey=String(now.getFullYear());
+    const money=n=>fmtMoney(Math.round(Number(n)||0)), incomeEntries=financeIncomeEntries();
+    const monthIncome=incomeEntries.filter(f=>String(f.date||'').startsWith(monthKey)).reduce((a,f)=>a+Number(f.amount||0),0);
+    const monthExpense=S.finance.filter(f=>f.type==='expense'&&String(f.date||'').startsWith(monthKey)).reduce((a,f)=>a+Number(f.amount||0),0);
+    const yearIncome=incomeEntries.filter(f=>String(f.date||'').startsWith(yearKey)).reduce((a,f)=>a+Number(f.amount||0),0);
+    const yearExpense=S.finance.filter(f=>f.type==='expense'&&String(f.date||'').startsWith(yearKey)).reduce((a,f)=>a+Number(f.amount||0),0);
+    const types=['session','consult','correction','model'];
+    const done=S.events.filter(e=>e&&e.status==='completed'&&String(e.date||'').startsWith(monthKey)&&types.includes(e.type)&&Number(e.cost||0)>0);
+    const avg=done.length?Math.round(done.reduce((a,e)=>a+Number(e.cost||0),0)/done.length):0;
+    const {start,end}=periodRangeISO(financePeriod,0), periodItems=S.finance.filter(f=>financeScope(f));
+    const periodIncome=incomeEntries.filter(f=>financeScope(f)).reduce((a,f)=>a+Number(f.amount||0),0);
+    const periodExpense=periodItems.filter(f=>f.type==='expense').reduce((a,f)=>a+Number(f.amount||0),0);
+    const today=todayISO();
+    const upcoming=S.events.filter(e=>e&&types.includes(e.type)&&e.date>=today&&e.date<=end&&Number(e.cost||0)>0&&!['completed','cancelled','canceled','noshow','refunded','void','отменена','отменено','неявка'].includes(String(e.status||'').toLowerCase()));
+    window._finItems=periodItems;
+    window._finForecast=upcoming.map(e=>{
+      const paid=S.payments.filter(p=>String(p.eventId)===String(e.id)&&!['возвращено','refunded','void','cancelled','canceled'].includes(String(p.status||'').toLowerCase())).reduce((a,p)=>a+Number(p.amount||0),0);
+      return {e,rest:Math.max(0,Number(e.cost||0)-Math.max(Number(e.bookingAmount||0),paid))};
+    }).filter(x=>x.rest>0).sort((a,b)=>(a.e.date+(a.e.start||'')).localeCompare(b.e.date+(b.e.start||'')));
+    const forecast=window._finForecast.reduce((a,x)=>a+x.rest,0);
+    const granularity=(financePeriod==='year'||financePeriod==='all')?'month':financePeriod==='quarter'?'week':'day';
+    const range=financePeriod==='all'?periodRangeISO('year',0):{start,end};
+    const points=buildIncomeSeries(range.start,range.end,granularity);
+    const monthName=now.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+    const periodLabel={day:'за день',week:'за неделю',month:'за месяц',quarter:'за квартал',year:'за год',all:'за всё время'}[financePeriod]||'за период';
+    let html='<div class="finance-head"><div><h2 style="margin:0">Финансы</h2><div class="small dim">Доходы, расходы и ожидаемые поступления</div></div><div class="finance-head-actions"><button class="btn btn-secondary btn-sm" onclick="calculateFinanceMonth()">Пересчитать</button><button class="btn btn-primary btn-sm" onclick="openFinanceForm()">＋ Операция</button></div></div>';
+    html+='<section class="finance-premium-summary finance-summary-compact"><div class="finance-summary-top"><div><div class="finance-eyebrow">ТЕКУЩИЙ МЕСЯЦ</div><div class="finance-summary-total">'+finVal(money(monthIncome))+'</div><div class="finance-summary-caption">'+esc(monthName)+' · фактически полученный доход</div></div><div class="finance-summary-mark">₽</div></div>';
+    html+='<div class="finance-summary-grid"><div class="finance-stat"><span>Расходы за месяц</span><b>'+finVal(money(monthExpense))+'</b><small>Сохранённые расходные операции</small></div>';
+    html+='<div class="finance-stat"><span>Доход за год</span><b>'+finVal(money(yearIncome))+'</b><small>'+now.getFullYear()+' год · без прогноза</small></div>';
+    html+='<div class="finance-stat"><span>Средний чек</span><b>'+(avg?finVal(money(avg)):'—')+'</b><small>'+done.length+' завершённых сеансов с ценой</small></div>';
+    html+='<div class="finance-stat finance-stat-net"><span>Прибыль за год</span><b>'+finVal(money(yearIncome-yearExpense))+'</b><small>Расходы за год: '+money(yearExpense)+'</small></div></div></section>';
+    if(financePeriod!=='all')html+='<div class="fin-forecast" onclick="openForecastSheet()" role="button" tabindex="0"><div><div class="fl">Ожидаемые поступления</div><div class="fv">+'+finVal(money(forecast))+'</div><div class="small dim">'+(window._finForecast.length?window._finForecast.length+' записей с неоплаченным остатком':'Нет предстоящих записей с остатком')+'</div></div><div class="tot"><div class="fl">Доход + прогноз</div><div class="fv">'+finVal(money(periodIncome+forecast))+'</div><div class="small dim">'+periodLabel+', включая будущие записи</div></div></div>';
+    html+='<div class="segmented finance-period-tabs" style="margin-bottom:12px">'+[['day','День'],['week','Неделя'],['month','Месяц'],['quarter','Квартал'],['year','Год'],['all','Всё']].map(([p,label])=>'<button class="'+(financePeriod===p?'active':'')+'" onclick="setFinPeriod(\''+p+'\')">'+label+'</button>').join('')+'</div>';
+    html+='<section class="card finance-chart-card"><div class="finance-chart-heading"><div><div class="sec-label" style="margin:0">Движение денег</div><div class="small dim">Фактический доход · '+periodLabel+'</div></div><div class="finance-chart-net"><span>Доход минус расходы</span><b>'+finVal(money(periodIncome-periodExpense))+'</b></div></div>';
+    html+=S.settings.hideFinance?'<p class="dim small" style="padding:35px 0;text-align:center">График скрыт в настройках безопасности</p>':'<canvas id="finMainChart" style="width:100%;height:190px"></canvas>';
+    html+='</section><div class="tile-grid finance-tools" style="margin:12px 0 8px"><div class="tile" onclick="openFinCategories()">'+icon('reports','ic')+'<span>Категории</span></div><div class="tile" onclick="openFinOperations()">'+icon('data','ic')+'<span>Операции ('+periodItems.length+')</span></div><div class="tile" onclick="openFinChart()">'+icon('chart','ic')+'<span>По категориям</span></div><div class="tile" onclick="exportCSV(\'finance\')">'+icon('edit','ic')+'<span>Экспорт</span></div></div>';
+    html+='<div class="small dim finance-footnote">Доход считается по сохранённым платежам и финансовым операциям без двойного учёта связанных записей. Будущие сеансы показаны отдельно как прогноз и не включаются в фактический доход.</div>';
+    $('#content').innerHTML=html;
+    if(!S.settings.hideFinance)setTimeout(()=>drawLineChart($('#finMainChart'),points),20);
+  }catch(err){
     console.error('INK.OS: finance renderer failed',err);
     const root=$('#content');
-    if(root) root.innerHTML=`<h2>Финансы</h2>
-      <div class="card">
-        <p>Не удалось полностью загрузить финансовую сводку.</p>
-        <p class="small dim">Данные операций сохранены. Можно повторить загрузку или добавить операцию.</p>
-        <p class="small dim" style="overflow-wrap:anywhere">Ошибка: ${esc(err&&err.message?err.message:String(err))}</p>
-        <div class="btn-row">
-          <button class="btn btn-sm" onclick="go('finance')">Повторить</button>
-          <button class="btn btn-sm btn-primary" onclick="openFinanceForm()">Добавить операцию</button>
-        </div>
-      </div>`;
+    if(root)root.innerHTML='<h2>Финансы</h2><div class="card"><p>Не удалось загрузить финансовый блок.</p><p class="small dim" style="overflow-wrap:anywhere">Ошибка: '+esc(err&&err.message?err.message:String(err))+'</p><button class="btn btn-primary" onclick="go(\'finance\')">Повторить</button></div>';
   }
 };
 function openFinCategories(){
@@ -4282,49 +4188,10 @@ function openFinChart(){
 }
 
 function calculateFinanceMonth(){
-  // Recalculate existing Finance cards in place; do not create a new report or write to saved records.
-  const now=new Date();
-  const monthKey=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const yearKey=String(now.getFullYear());
-  const sessionTypes=['session','consult','correction','model'];
-  const excluded=['cancelled','canceled','noshow','refunded','void','отменена','отменено','неявка'];
-  const events=(S.events||[]).filter(e=>e&&typeof e.date==='string'&&sessionTypes.includes(e.type)&&!excluded.includes(String(e.status||'').toLowerCase()));
-  const completedMonth=events.filter(e=>e.date.startsWith(monthKey)&&e.status==='completed'&&Number(e.cost||0)>0);
-  const upcoming=events.filter(e=>e.date.startsWith(monthKey)&&e.status!=='completed'&&e.date>=todayISO()&&Number(e.cost||0)>0);
-  const extraIncome=(S.finance||[]).filter(f=>f&&f.type==='income'&&String(f.date||'').startsWith(monthKey)&&!f.eventId&&Number(f.amount||0)>0).reduce((a,f)=>a+Number(f.amount||0),0);
-  const monthIncome=completedMonth.reduce((a,e)=>a+Number(e.cost||0),0)+extraIncome;
-  const monthExpense=(S.finance||[]).filter(f=>f&&f.type==='expense'&&String(f.date||'').startsWith(monthKey)).reduce((a,f)=>a+Number(f.amount||0),0);
-  const yearEvents=events.filter(e=>e.date.startsWith(yearKey)&&e.status==='completed'&&Number(e.cost||0)>0);
-  const yearExtra=(S.finance||[]).filter(f=>f&&f.type==='income'&&String(f.date||'').startsWith(yearKey)&&!f.eventId&&Number(f.amount||0)>0).reduce((a,f)=>a+Number(f.amount||0),0);
-  const yearIncome=yearEvents.reduce((a,e)=>a+Number(e.cost||0),0)+yearExtra;
-  const yearExpense=(S.finance||[]).filter(f=>f&&f.type==='expense'&&String(f.date||'').startsWith(yearKey)).reduce((a,f)=>a+Number(f.amount||0),0);
-  const average=completedMonth.length?Math.round(completedMonth.reduce((a,e)=>a+Number(e.cost||0),0)/completedMonth.length):0;
-  const taxRate=Math.max(0,Math.min(100,Number(S.settings?.taxRate||0)));
-  const tax=monthIncome*taxRate/100;
-  const net=monthIncome-monthExpense-tax;
-  const paidFor=e=>{
-    const payments=(S.payments||[]).filter(p=>p&&String(p.eventId)===String(e.id)&&!['возвращено','refunded','void','cancelled','canceled'].includes(String(p.status||'').toLowerCase()));
-    return Math.max(Number(e.bookingAmount||0),payments.reduce((a,p)=>a+Number(p.amount||0),0));
-  };
-  const expected=upcoming.reduce((sum,e)=>sum+Math.max(0,Number(e.cost||0)-paidFor(e)),0);
-  const setText=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value;};
-  const money=n=>fmtMoney(Math.round(Number(n||0)));
-  setText('finance-month-income-value',money(monthIncome));
-  setText('finance-month-expense-value',money(monthExpense));
-  setText('finance-month-net-value',money(net));
-  setText('finance-year-income-value',money(yearIncome));
-  setText('finance-year-expense-value',money(yearExpense));
-  setText('finance-month-average-value',average?money(average):'—');
-  setText('finance-month-average-caption',completedMonth.length?completedMonth.length+' завершённых сеансов с ценой':'Нет завершённых сеансов с ценой');
-  setText('finance-month-tax-value',money(tax));
-  setText('finance-month-profit-value',money(monthIncome-monthExpense));
-  setText('finance-forecast-value','+'+money(expected));
-  setText('finance-forecast-count',upcoming.filter(e=>Number(e.cost||0)-paidFor(e)>0).length+' будущих записей');
-  setText('finance-period-total-value',money(monthIncome+expected));
-  // Show the existing cards, not a new panel.
-  const root=document.getElementById('content');
-  if(root)root.scrollIntoView({behavior:'smooth',block:'start'});
-  if(typeof toast==='function')toast('Финансы пересчитаны по календарю');
+  // Обновляем существующие карточки тем же расчётом, что использует экран.
+  // Данные календаря, платежей и финансовых операций не изменяем и не дублируем.
+  if(typeof RENDERERS.finance==='function')RENDERERS.finance();
+  if(typeof toast==='function')toast('Финансы пересчитаны. Будущие записи учитываются только в прогнозе.');
 }
 function openFinanceDiagnostics(){
   const now=new Date();
@@ -6695,6 +6562,18 @@ tr:hover{background:rgba(180,154,106,.045)}
 .pj-bar{height:9px;border-radius:99px;overflow:hidden;background:rgba(255,255,255,.08);border:1px solid rgba(198,163,98,.15)}
 .pj-bar>div{height:100%;border-radius:99px;background:linear-gradient(90deg,#8c6b34,#d6b56e,#f3dfaa);box-shadow:0 0 12px rgba(214,181,110,.2);transition:width .6s ease}
 @media(max-width:390px){.an-row{grid-template-columns:minmax(52px,68px) minmax(32px,1fr) minmax(52px,64px);gap:6px}.an-row>b{font-size:10px}.an-metric{padding:10px}.an-metric b{font-size:13px}}
+/* Rebuilt finance layout */
+.finance-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 12px}
+.finance-head-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.finance-chart-card{margin-bottom:12px;padding:14px}
+.finance-chart-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
+.finance-chart-net{text-align:right;min-width:0}
+.finance-chart-net span{display:block;font-size:10px;color:var(--muted,#aaa)}
+.finance-chart-net b{display:block;margin-top:4px;font-size:15px;overflow-wrap:anywhere}
+.finance-period-tabs{display:flex;gap:4px;overflow-x:auto}
+.finance-period-tabs button{flex:1 0 auto}
+.finance-footnote{padding:0 2px 12px;line-height:1.5}
+@media(max-width:520px){.finance-head{align-items:flex-start}.finance-head-actions{width:100%}.finance-head-actions .btn{flex:1}.finance-chart-heading{display:block}.finance-chart-net{text-align:left;margin-top:8px}.finance-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* Premium finance dashboard */
 .finance-premium-summary{position:relative;overflow:hidden;margin:0 0 14px;padding:17px;border:1px solid rgba(198,163,98,.36);border-radius:20px;background:radial-gradient(ellipse at 95% 0%,rgba(198,163,98,.16),transparent 42%),linear-gradient(145deg,#20201f,#111112 75%);box-shadow:0 14px 34px rgba(0,0,0,.16)}
 .finance-summary-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
