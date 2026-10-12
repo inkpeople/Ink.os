@@ -4129,16 +4129,12 @@ RENDERERS.finance=function(){
     <div class="finance-summary-grid">
       <div class="finance-stat"><span>Доход за месяц</span><b>${finVal(fmtMoney(monthIncome))}</b></div>
       <div class="finance-stat"><span>Расход за месяц</span><b>${finVal(fmtMoney(monthExpense))}</b></div>
-      <div class="finance-stat"><span>Доход за год</span><b>${f  ${financePeriod!=='all'?`<div class="fin-forecast" onclick="openForecastSheet()">
-    <div><div class="fl">Предстоит заработать ${fcLabel}</div><div class="fv">+${finVal(fmtMoney(fcExpected))}</div><div class="small dim">${fcList.length?fcList.length+' '+financePlural(fcList.length,'запись','записи','записей')+' с остатком':'Нет будущих записей с остатком'}</div></div>
-    <div class="tot"><div class="fl">Долги за проведённые сеансы</div><div class="fv">${finVal(fmtMoney(debtExpected))}</div><div class="small dim">${debtList.length?debtList.length+' '+financePlural(debtList.length,'сеанс','сеанса','сеансов')+' с остатком':'Нет долгов по проведённым сеансам'}</div></div>
-  </div>`:''}</div></div>
-    <div class="fin-card exp">${icon('reports')}<div class="fl">Расходы за выбранный период</div><div class="fv">${finVal(fmtMoney(expense))}</div></div>
-  </div>`:''}
-  ${financePeriod!=='all'?`<div class="fin-forecast" onclick="openForecastSheet()">
-    <div><div class="fl">Ещё заработаю ${fcLabel}</div><div class="fv">+${finVal(fmtMoney(fcExpected))}</div><div class="small dim">${fcList.length?fcList.length+' '+financePlural(fcList.length,'запись','записи','записей')+' с неоплаченным остатком':'Нет предстоящих записей с остатком'}</div></div>
-    <div class="tot"><div class="fl">Итого за период</div><div class="fv">${finVal(fmtMoney(income+fcExpected))}</div><div class="small dim">с учётом прогноза</div></div>
-  </div>`:''}
+      <div class="finance-stat"><span>Доход за год</span><b>${finVal(fmtMoney(yearIncome))}</b><small>${now.getFullYear()} год</small></div>
+      <div class="finance-stat"><span>Средний чек за месяц</span><b>${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small>${completedMonthEvents.length?completedMonthEvents.length+' завершённых сеансов':'Нет завершённых сеансов с ценой'}</small></div>
+    </div>
+  </section>
+  ${financePeriod!=='month'?'<div class="fin-pair finance-period-pair"><div class="fin-card inc">${icon('coin')}<div class="fl">Доход за выбранный период</div><div class="fv">${finVal(fmtMoney(income))}</div></div><div class="fin-card exp">${icon('reports')}<div class="fl">Расходы за выбранный период</div><div class="fv">${finVal(fmtMoney(expense))}</div></div></div>':''}
+  ${financePeriod!=='all'?'<div class="fin-forecast" onclick="openForecastSheet()"><div><div class="fl">Предстоит заработать ${fcLabel}</div><div class="fv">+${finVal(fmtMoney(fcExpected))}</div><div class="small dim">${fcList.length?fcList.length+' '+financePlural(fcList.length,'запись','записи','записей')+' с остатком':'Нет будущих записей с остатком'}</div></div><div class="tot"><div class="fl">Долги за проведённые сеансы</div><div class="fv">${finVal(fmtMoney(debtExpected))}</div><div class="small dim">${debtList.length?debtList.length+' '+financePlural(debtList.length,'сеанс','сеанса','сеансов')+' с остатком':'Нет долгов по проведённым сеансам'}</div></div></div>':''}
   <div class="segmented" style="margin-bottom:14px">${['day','week','month','quarter','year','all'].map(p=>`<button class="${financePeriod===p?'active':''}" onclick="setFinPeriod('${p}')">${{day:'День',week:'Неделя',month:'Месяц',quarter:'Квартал',year:'Год',all:'Всё'}[p]}</button>`).join('')}</div>
   <div class="card" style="margin-bottom:14px">
     <div class="sec-label" style="margin:0">Прибыль за выбранный период</div><div class="profit">${finVal(fmtMoney(income-expense))}</div><div class="small dim" style="margin-bottom:4px">Доход минус расходы · график в ${(S.settings.currency||'₽')}</div>
