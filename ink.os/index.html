@@ -1898,9 +1898,9 @@ RENDERERS.dashboard=function(){
   const upcoming=S.events.filter(e=>new Date(e.date+'T'+(e.start||'00:00'))>now).sort((a,b)=>new Date(a.date+'T'+(a.start||'00:00'))-new Date(b.date+'T'+(b.start||'00:00')))[0];
   const monthStr=today.slice(0,7);
   const monthFinance=S.finance.filter(f=>f.date && f.date.slice(0,7)===monthStr);
-  const revenueMonth=monthFinance.filter(f=>f.type==='income').reduce((s,f)=>s+Number(f.amount||0),0);
+  const revenueMonth=financeIncomeEntries().filter(f=>(f.date||'').slice(0,7)===monthStr).reduce((s,f)=>s+Number(f.amount||0),0);
   const expenseMonth=monthFinance.filter(f=>f.type==='expense').reduce((s,f)=>s+Number(f.amount||0),0);
-  const revenueToday=S.finance.filter(f=>f.type==='income'&&f.date===today).reduce((s,f)=>s+Number(f.amount||0),0);
+  const revenueToday=financeIncomeEntries().filter(f=>f.date===today).reduce((s,f)=>s+Number(f.amount||0),0);
   const expensesFilled = monthFinance.some(f=>f.type==='expense'); // heuristic
   const profit=revenueMonth-expenseMonth;
   const newClients=S.clients.filter(c=>c.firstVisit && c.firstVisit.slice(0,7)===monthStr).length;
