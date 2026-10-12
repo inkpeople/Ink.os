@@ -4130,6 +4130,7 @@ RENDERERS.finance=function(){
     <div><h2 style="margin:0">Финансы</h2><div class="small dim">Реальные операции и прогноз поступлений</div></div>
     <button class="btn btn-secondary btn-sm" onclick="openFinanceDiagnostics()">Проверить расчёт</button><button class="btn btn-primary btn-sm" onclick="calculateFinanceMonth()">Рассчитать месяц</button><button class="btn btn-primary btn-icon btn-sm" onclick="openFinanceForm()">${icon('plus')}</button>
   </div>
+  <section id="finance-month-report" class="finance-month-report" style="display:none;margin-bottom:16px"></section>
   <section class="finance-premium-summary finance-summary-compact">
     <div class="finance-summary-top">
       <div>
@@ -4266,7 +4267,10 @@ function calculateFinanceMonth(){
   const doneRows=completed.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(e=>'<tr><td>'+esc(fmtDate(e.date))+'</td><td>'+clientName(e)+'</td><td>'+money(e.cost)+'</td></tr>').join('');
   const forecastList=forecastRows.slice().sort((a,b)=>String(a.e.date).localeCompare(String(b.e.date))).map(x=>'<tr><td>'+esc(fmtDate(x.e.date))+'</td><td>'+clientName(x.e)+'</td><td>'+money(x.e.cost)+'</td><td>'+money(paidFor(x.e))+'</td><td><b>'+money(x.rest)+'</b></td></tr>').join('');
   const expenseRows=(S.finance||[]).filter(f=>f&&f.type==='expense'&&String(f.date||'').startsWith(yearKey)).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).map(f=>'<tr><td>'+esc(fmtDate(f.date))+'</td><td>'+esc(EXPENSE_CATEGORIES[f.category]||f.category||'Расход')+'</td><td>'+money(f.amount)+'</td><td>'+esc(f.comment||'—')+'</td></tr>').join('');
-  openSheet('Расчёт месяца · '+MON[now.getMonth()]+' '+yearKey,`
+  const reportEl=document.getElementById('finance-month-report');
+  if(!reportEl)return;
+  reportEl.style.display='block';
+  reportEl.innerHTML=`
     <p class="small dim">Расчёт по календарю и сохранённым финансовым расходам. Данные не изменяются. Завершённые сеансы считаются заработком по цене записи; будущие — прогнозом за вычетом предоплат и платежей.</p>
     <div class="finance-summary-grid">
       <div class="finance-stat"><span>Заработано за месяц</span><b>${money(monthIncome)}</b><small>Завершённые сеансы + прочий доход</small></div>
@@ -4283,7 +4287,8 @@ function calculateFinanceMonth(){
     <h4 style="margin-top:16px">Расходы за год</h4>
     <div class="table-wrap"><table><tr><th>Дата</th><th>Категория</th><th>Сумма</th><th>Комментарий</th></tr>${expenseRows||'<tr><td colspan="4">Нет сохранённых расходов за этот год.</td></tr>'}</table></div>
     <p class="small dim">В расчёт расходов попадают только сохранённые финансовые операции — закупки из склада сами по себе не считаются расходом.</p>
-  `);
+  `;
+  reportEl.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function openFinanceDiagnostics(){
