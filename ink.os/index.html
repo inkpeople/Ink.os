@@ -4088,7 +4088,10 @@ RENDERERS.finance=function(){
   const prevEvts=S.events.filter(e=>e.date>=prevRange.start&&e.date<=prevRange.end);
   const recordsCount=periodEvts.length;
   const prevRecordsCount=prevEvts.length;
-  const avgCheck=recordsCount? income/recordsCount : 0;
+  const billableTypes=['session','consult','correction','model'];
+  const completedEvents=periodEvts.filter(e=>e.status==='completed'&&billableTypes.includes(e.type));
+  const completedIncome=completedEvents.reduce((sum,e)=>sum+incomeEntries.filter(f=>f.eventId===e.id&&financeScope(f)).reduce((a,f)=>a+Number(f.amount||0),0),0);
+  const avgCheck=completedEvents.length?completedIncome/completedEvents.length:0;
 
   const newClients=S.clients.filter(c=>c.firstVisit && c.firstVisit>=start && c.firstVisit<=end).length;
   const prevNewClients=S.clients.filter(c=>c.firstVisit && c.firstVisit>=prevRange.start && c.firstVisit<=prevRange.end).length;
@@ -4100,12 +4103,16 @@ RENDERERS.finance=function(){
   const prevNoshow=prevEvts.filter(e=>e.status==='noshow').length;
   const workHours=periodEvts.filter(e=>['session','consult','correction','model'].includes(e.type)).reduce((s,e)=>s+eventHours(e),0);
   const fcToday=todayISO();
-  const fcList=financePeriod==='all'?[]:periodEvts.filter(e=>!['completed','cancelled','noshow'].includes(e.status)&&e.date>=fcToday&&Number(e.cost||0)>0).map(e=>{
-    const paid=S.payments.filter(p=>p.eventId===e.id).reduce((a,p)=>a+Number(p.amount||0),0);
-    return {e,rest:Math.max(0,Number(e.cost||0)-Number(e.bookingAmount||0)-paid)};
-  }).filter(x=>x.rest>0).sort((a,b)=>(a.e.date+(a.e.start||'')).localeCompare(b.e.date+(b.e.start||'')));
+  const remainingForEvent=e=>{
+    const paid=S.payments.filter(p=>p.eventId===e.id&&p.status!=='Возвращено'&&p.status!=='refunded').reduce((a,p)=>a+Number(p.amount||0),0);
+    return Math.max(0,Number(e.cost||0)-Number(e.bookingAmount||0)-paid);
+  };
+  const fcList=financePeriod==='all'?[]:periodEvts.filter(e=>billableTypes.includes(e.type)&&!['completed','cancelled','noshow'].includes(e.status)&&e.date>=fcToday&&Number(e.cost||0)>0).map(e=>({e,rest:remainingForEvent(e)})).filter(x=>x.rest>0).sort((a,b)=>(a.e.date+(a.e.start||'')).localeCompare(b.e.date+(b.e.start||'')));
   const fcExpected=fcList.reduce((s,x)=>s+x.rest,0);
+  const debtList=periodEvts.filter(e=>billableTypes.includes(e.type)&&e.status==='completed'&&Number(e.cost||0)>0).map(e=>({e,rest:remainingForEvent(e)})).filter(x=>x.rest>0);
+  const debtExpected=debtList.reduce((s,x)=>s+x.rest,0);
   window._finForecast=fcList;
+  window._finDebts=debtList;
   const fcLabel={day:'сегодня',week:'до конца недели',month:'до конца месяца',quarter:'до конца квартала',year:'до конца года'}[financePeriod]||'';
 
   const granularity = financePeriod==='year' ? 'month' : financePeriod==='quarter' ? 'week' : 'day';
@@ -4122,12 +4129,10 @@ RENDERERS.finance=function(){
     <div class="finance-summary-grid">
       <div class="finance-stat"><span>Доход за месяц</span><b>${finVal(fmtMoney(monthIncome))}</b></div>
       <div class="finance-stat"><span>Расход за месяц</span><b>${finVal(fmtMoney(monthExpense))}</b></div>
-      <div class="finance-stat"><span>Доход за год</span><b>${finVal(fmtMoney(yearIncome))}</b><small>${now.getFullYear()} год</small></div>
-      <div class="finance-stat"><span>Средний чек за месяц</span><b>${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small>${completedMonthEvents.length?completedMonthEvents.length+' завершённых сеансов':'Нет завершённых сеансов с ценой'}</small></div>
-    </div>
-  </section>
-  ${financePeriod!=='month'?`<div class="fin-pair finance-period-pair">
-    <div class="fin-card inc">${icon('coin')}<div class="fl">Доход за выбранный период</div><div class="fv">${finVal(fmtMoney(income))}</div></div>
+      <div class="finance-stat"><span>Доход за год</span><b>${f  ${financePeriod!=='all'?`<div class="fin-forecast" onclick="openForecastSheet()">
+    <div><div class="fl">Предстоит заработать ${fcLabel}</div><div class="fv">+${finVal(fmtMoney(fcExpected))}</div><div class="small dim">${fcList.length?fcList.length+' '+financePlural(fcList.length,'запись','записи','записей')+' с остатком':'Нет будущих записей с остатком'}</div></div>
+    <div class="tot"><div class="fl">Долги за проведённые сеансы</div><div class="fv">${finVal(fmtMoney(debtExpected))}</div><div class="small dim">${debtList.length?debtList.length+' '+financePlural(debtList.length,'сеанс','сеанса','сеансов')+' с остатком':'Нет долгов по проведённым сеансам'}</div></div>
+  </div>`:''})}</div></div>
     <div class="fin-card exp">${icon('reports')}<div class="fl">Расходы за выбранный период</div><div class="fv">${finVal(fmtMoney(expense))}</div></div>
   </div>`:''}
   ${financePeriod!=='all'?`<div class="fin-forecast" onclick="openForecastSheet()">
@@ -4218,12 +4223,17 @@ function financeScope(f){
 }
 function openForecastSheet(){
   const list=window._finForecast||[];
+  const debts=window._finDebts||[];
   const total=list.reduce((s,x)=>s+x.rest,0);
-  openSheet('Ожидаемые поступления', list.length?`
-    <div class="small dim" style="margin-bottom:8px">Остаток по предстоящим записям (стоимость − предоплата − уже внесённые оплаты).</div>
-    ${list.map(x=>`<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line);cursor:pointer" onclick="closeSheet();openEventView('${x.e.id}')"><span>${fmtDate(x.e.date)}${x.e.start?' · '+x.e.start:''} — ${esc(clientOrLabel(x.e))}</span><b>${finVal(fmtMoney(x.rest))}</b></div>`).join('')}
-    <div class="row" style="margin-top:10px"><b>Всего</b><b>${finVal(fmtMoney(total))}</b></div>`
-    :'<p class="dim small">Нет предстоящих записей с неоплаченным остатком. Укажите стоимость в записи, чтобы она попала в прогноз.</p>');
+  const debtTotal=debts.reduce((s,x)=>s+x.rest,0);
+  const row=x=>`<div class="row small" style="padding:8px 0;border-bottom:1px dashed var(--line);cursor:pointer" onclick="closeSheet();openEventView('${x.e.id}')"><span>${fmtDate(x.e.date)}${x.e.start?' · '+x.e.start:''} — ${esc(clientOrLabel(x.e))}</span><b>${finVal(fmtMoney(x.rest))}</b></div>`;
+  openSheet('Финансы по записям', `
+    <b>Предстоящие записи — ${finVal(fmtMoney(total))}</b>
+    <div class="small dim" style="margin:4px 0 8px">Остаток по будущим сеансам после предоплат и внесённых оплат.</div>
+    ${list.length?list.map(row).join(''):'<p class="dim small">Нет будущих записей с остатком.</p>'}
+    <div class="row" style="margin:12px 0 6px"><b>Долги за завершённые сеансы</b><b>${finVal(fmtMoney(debtTotal))}</b></div>
+    ${debts.length?debts.map(row).join(''):'<p class="dim small">Нет долгов по завершённым сеансам.</p>'}
+  `);
 }
 function openFinanceGoalSettings(){
   const rate=Number(S.settings.taxRate||0), goal=Number(S.settings.monthGoal||0);
