@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-welcome-splash-v34';
+const CACHE_NAME = 'ink-os-shell-calendar-header-fix-v35';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './vk-link.js', './client-retention.js'];
 
 self.addEventListener('install', event => {
