@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-client-photo-auto-v36';
+const CACHE_NAME = 'ink-os-shell-profile-photo-import-v37';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './vk-link.js', './client-retention.js'];
 
 self.addEventListener('install', event => {
