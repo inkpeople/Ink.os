@@ -2999,17 +2999,26 @@ function decrementInventoryCartridge(config,size,qty){
 let financePeriod='month';
 const INCOME_CATEGORIES={tattoo:'Татуировки',consult:'Консультации',correction:'Коррекции',training:'Менторство',film:'Продажа заживляющей плёнки'};
 const EXPENSE_CATEGORIES={cartridges:'Картриджи',pigments:'Пигменты',transferPaper:'Трансферная бумага',oilFoam:'Масло/пенка',lidocaine:'Ледокаин',rent:'Аренда',travel:'Guest Spot / поездки',other:'Другое'};
+function financeISODate(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function financeDateOnly(value){
+  if(!value) return null;
+  const m=String(value).match(/^(\\d{4})-(\\d{2})-(\\d{2})/);
+  if(!m) return null;
+  return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]));
+}
 function periodRangeISO(period,offset){
   offset=offset||0;
   const now=new Date();
   let start,end;
-  if(period==='day'){ start=new Date(now); start.setDate(start.getDate()+offset); end=new Date(start); }
-  else if(period==='week'){ start=new Date(now); start.setDate(now.getDate()-((now.getDay()+6)%7)+offset*7); end=new Date(start); end.setDate(start.getDate()+6); }
+  if(period==='day'){ start=new Date(now.getFullYear(),now.getMonth(),now.getDate()+offset); end=new Date(start); }
+  else if(period==='week'){ start=new Date(now.getFullYear(),now.getMonth(),now.getDate()-((now.getDay()+6)%7)+offset*7); end=new Date(start.getFullYear(),start.getMonth(),start.getDate()+6); }
   else if(period==='month'){ start=new Date(now.getFullYear(),now.getMonth()+offset,1); end=new Date(now.getFullYear(),now.getMonth()+offset+1,0); }
   else if(period==='quarter'){ const qAbs=Math.floor(now.getMonth()/3)+offset; const y=now.getFullYear()+Math.floor(qAbs/4); const qq=((qAbs%4)+4)%4; start=new Date(y,qq*3,1); end=new Date(y,qq*3+3,0); }
   else if(period==='year'){ start=new Date(now.getFullYear()+offset,0,1); end=new Date(now.getFullYear()+offset,11,31); }
-  else { start=new Date(2000,0,1); end=new Date(now); }
-  return {start:start.toISOString().slice(0,10),end:end.toISOString().slice(0,10)};
+  else { start=new Date(2000,0,1); end=new Date(now.getFullYear(),now.getMonth(),now.getDate()); }
+  return {start:financeISODate(start),end:financeISODate(end)};
 }function pctChange(cur,prev){
   if(!prev) return cur>0?100:0;
   return Math.round((cur-prev)/prev*100);
@@ -3051,7 +3060,9 @@ RENDERERS.finance=function(){
   const prevEvts=S.events.filter(e=>e.date>=prevRange.start&&e.date<=prevRange.end);
   const recordsCount=periodEvts.length;
   const prevRecordsCount=prevEvts.length;
-  const avgCheck=recordsCount? income/recordsCount : 0;
+  // Средний чек считаем по завершённым сеансам, исключая отмены и неявки.
+  const completedEvents=periodEvts.filter(e=>e.status==='completed'&&['session','consult','correction','model'].includes(e.type));
+  const avgCheck=completedEvents.length?income/completedEvents.length:0;
 
   const newClients=S.clients.filter(c=>c.firstVisit && c.firstVisit>=start && c.firstVisit<=end).length;
   const prevNewClients=S.clients.filter(c=>c.firstVisit && c.firstVisit>=prevRange.start && c.firstVisit<=prevRange.end).length;
@@ -3162,15 +3173,11 @@ function openFinChart(){
   setTimeout(()=>drawBarChart(canvas,series),20);
 }
 function financeScope(f){
-  if(!f.date) return financePeriod==='all';
-  const now=new Date(); const d=new Date(f.date);
   if(financePeriod==='all') return true;
-  if(financePeriod==='day') return f.date===todayISO();
-  if(financePeriod==='week'){ const s=new Date(now); s.setDate(now.getDate()-now.getDay()+1); return d>=s; }
-  if(financePeriod==='month') return f.date.slice(0,7)===now.toISOString().slice(0,7);
-  if(financePeriod==='quarter'){ const q=Math.floor(now.getMonth()/3); return d.getFullYear()===now.getFullYear() && Math.floor(d.getMonth()/3)===q; }
-  if(financePeriod==='year') return d.getFullYear()===now.getFullYear();
-  return true;
+  if(!f.date) return false;
+  const range=periodRangeISO(financePeriod,0);
+  const date=String(f.date).slice(0,10);
+  return date>=range.start && date<=range.end;
 }
 function openForecastSheet(){
   const list=window._finForecast||[];
