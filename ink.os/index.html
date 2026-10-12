@@ -1262,6 +1262,7 @@ const fmtMoney=n=>{n=Number(n)||0;const cur=(S.settings&&S.settings.currency)||'
 const fmtDate=d=>{ if(!d) return '—'; const dt=(d instanceof Date)?d:new Date(d); return dt.toLocaleDateString('ru-RU'); };
 const fmtDateTime=d=>{ const dt=(d instanceof Date)?d:new Date(d); return dt.toLocaleDateString('ru-RU')+' '+dt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}); };
 const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+const dateToLocalISO=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');};
 const daysBetween=(a,b)=>Math.floor((new Date(b)-new Date(a))/86400000);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -3109,7 +3110,7 @@ function periodEvents(period){
   else if(period==='month'){ start=new Date(now.getFullYear(),now.getMonth(),1); end=new Date(now.getFullYear(),now.getMonth()+1,0); }
   else if(period==='quarter'){ const q=Math.floor(now.getMonth()/3); start=new Date(now.getFullYear(),q*3,1); end=new Date(now.getFullYear(),q*3+3,0); }
   else { start=new Date(now.getFullYear(),0,1); end=new Date(now.getFullYear(),11,31); }
-  const s=start.toISOString().slice(0,10), e=end.toISOString().slice(0,10);
+  const s=dateToLocalISO(start), e=dateToLocalISO(end);
   return S.events.filter(ev=>ev.date>=s && ev.date<=e);
 }
 function calFilterType(t){ calState.filterType=t; RENDERERS.calendar(); }
@@ -3150,7 +3151,7 @@ function renderCalGrid(){
     let html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">';
     for(let i=0;i<7;i++){
       const dd=new Date(start); dd.setDate(start.getDate()+i);
-      const iso=dd.toISOString().slice(0,10);
+      const iso=dateToLocalISO(dd);
       const dayEvs=evs.filter(e=>e.date===iso).sort((a,b)=>(a.start||'').localeCompare(b.start||''));
       const gsToday=guestSpotsOnDate(iso);
       html+=`<div class="card" onclick="openDaySummary('${iso}')" ondblclick="openDayAdd('${iso}')" style="cursor:pointer;min-height:120px${gsToday.length?';border-color:var(--pur)':''}">
@@ -3162,7 +3163,7 @@ function renderCalGrid(){
     html+='</div>';
     $('#calGrid').innerHTML=html;
   } else if(calState.view==='day'){
-    const iso=d.toISOString().slice(0,10);
+    const iso=dateToLocalISO(d);
     $('#calLabel').textContent=fmtDate(iso);
     const dayEvs=evs.filter(e=>e.date===iso).sort((a,b)=>(a.start||'').localeCompare(b.start||''));
     const gsToday=guestSpotsOnDate(iso);
@@ -6441,6 +6442,28 @@ tr:hover{background:rgba(180,154,106,.045)}
 .finance-summary-actions .btn{min-height:36px}
 .finance-period-pair .fl{font-size:11px;line-height:1.4}
 @media(max-width:390px){.finance-summary-foot{display:grid;grid-template-columns:1fr;gap:5px}.finance-summary-actions .btn{flex:1 1 100%}}
+</style>
+
+<style id="inkos-header-calendar-fix">
+/* Keep the top bar readable on narrow screens without overlapping account controls. */
+#topbar{display:flex;align-items:center;gap:10px;min-width:0}
+#topbar>.brand{flex:1 1 auto;min-width:0;overflow:hidden}
+#topbarSub{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#topbar>div:last-child{flex:0 0 auto;min-width:0;gap:6px!important}
+#accountSyncState{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:520px){
+ #topbar{gap:6px!important;padding-left:10px!important;padding-right:10px!important}
+ #topbar .brand{gap:6px!important}
+ #topbarSub{font-size:14px!important;letter-spacing:-.02em!important}
+ #topbar>div:last-child{gap:4px!important}
+ #authAccountBtn{max-width:54px!important;min-width:0;padding:0 5px!important;font-size:10px!important}
+ #accountSyncState{display:none!important}
+ #topbar .bell-btn{flex:0 0 32px;width:32px!important;height:32px!important}
+}
+@media(max-width:370px){
+ #topbarSub{font-size:12px!important}
+ #authAccountBtn{max-width:45px!important;font-size:9px!important}
+}
 </style>
 </body>
 </html>
