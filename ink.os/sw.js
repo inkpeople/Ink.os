@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-auto-telegram-avatars-v38';
+const CACHE_NAME = 'ink-os-shell-client-photo-search-v39';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './vk-link.js', './client-retention.js'];
 
 self.addEventListener('install', event => {
