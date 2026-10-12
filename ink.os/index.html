@@ -1001,6 +1001,23 @@ async function loadAccountData(){
 function showAuthScreen(message='',kind=''){
   authScreen(true);authSetMode('login');if(message)authMessage(message,kind);
 }
+function showWelcomeSplashIfPending(){
+  const splash=document.getElementById('welcomeSplash');
+  if(!splash||!currentAuthUser)return false;
+  const email=String(currentAuthUser.email||'').trim().toLowerCase();
+  let pending='';
+  try{pending=localStorage.getItem('inkos_pending_welcome_email')||'';}catch(e){}
+  if(!email||pending.toLowerCase()!==email)return false;
+  const key='inkos_welcome_shown_'+String(currentAuthUser.id||email).replace(/[^a-zA-Z0-9_-]/g,'_');
+  let already=false;try{already=localStorage.getItem(key)==='1';}catch(e){}
+  if(already){try{localStorage.removeItem('inkos_pending_welcome_email');}catch(e){}return false;}
+  try{localStorage.setItem(key,'1');localStorage.removeItem('inkos_pending_welcome_email');}catch(e){}
+  splash.classList.add('show');splash.setAttribute('aria-hidden','false');
+  let timer=setTimeout(closeWelcomeSplash,4200);
+  function closeWelcomeSplash(){clearTimeout(timer);splash.classList.remove('show');splash.setAttribute('aria-hidden','true');}
+  document.getElementById('welcomeContinue')?.addEventListener('click',closeWelcomeSplash,{once:true});
+  return true;
+}
 async function finishAuthLogin(){
   authMessage('Загружаю личные данные из защищённого хранилища…');
   try{
@@ -1008,6 +1025,7 @@ async function finishAuthLogin(){
     authScreen(false);
     const app=document.getElementById('app');if(app)app.classList.remove('hidden');
     if(!appBooted){if(S.settings.pin)showPinScreen('unlock');else bootApp();}
+    showWelcomeSplashIfPending();
   }catch(e){
     accountDataReady=false;
     showAuthScreen('Не удалось открыть аккаунт: '+authFriendlyError(e),'error');
@@ -1040,6 +1058,7 @@ function bindAuthUI(){
     try{
       if(authMode==='signup'){
         const data=await authSignUp(email,password,name);
+        try{localStorage.setItem('inkos_pending_welcome_email',email);}catch(e){}
         if(!data.access_token||!data.user){
           authSetMode('login');document.getElementById('authEmail').value=email;
           authMessage('Аккаунт создан. Проверьте почту и подтвердите адрес, затем войдите.','success');return;
@@ -6257,6 +6276,34 @@ RENDERERS.assistant=function(){
 </script>
   <script src="./vk-link.js?v=20261011-fix4"></script>
   <script src="./client-retention.js"></script>
+
+<div id="welcomeSplash" class="welcome-splash" aria-hidden="true">
+  <div class="welcome-fireworks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="welcome-content">
+    <div class="welcome-mark">INK<span>.OS</span></div><div class="welcome-spark">✦ ✧ ✦</div>
+    <h1>Заходи — ты<br><span>мега тату-мастер!</span></h1>
+    <p>Твой талант. Твои правила. Твой INK.OS.</p>
+    <button type="button" id="welcomeContinue">Погнали!</button>
+  </div>
+</div>
+<style id="inkos-welcome-splash">
+.welcome-splash{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:24px;background:radial-gradient(ellipse at 50% 38%,#39201c 0%,#171110 48%,#090909 100%);color:#fff;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .35s ease,visibility .35s ease}
+.welcome-splash.show{opacity:1;visibility:visible;pointer-events:auto}
+.welcome-content{position:relative;z-index:2;width:min(100%,430px);text-align:center;animation:welcomePop .65s cubic-bezier(.2,.8,.2,1) both}
+.welcome-mark{font-size:17px;font-weight:950;letter-spacing:.25em;color:#f5eee7}.welcome-mark span{color:#e5b96e}
+.welcome-spark{margin:27px 0 14px;color:#eac67e;font-size:24px;letter-spacing:.42em;animation:welcomeSpark 1.2s ease-in-out infinite alternate}
+.welcome-content h1{margin:0;font-size:clamp(30px,8vw,44px);line-height:1.12;letter-spacing:-.045em;font-weight:900}
+.welcome-content h1 span{display:inline-block;margin-top:5px;color:#f0c779;text-shadow:0 0 24px #e8a94d55}
+.welcome-content p{margin:17px 0 26px;color:#c6b8ae;font-size:14px;letter-spacing:.02em}
+#welcomeContinue{border:1px solid #f0d49a;border-radius:12px;padding:13px 32px;background:linear-gradient(135deg,#f0cf89,#c18b48);color:#1b120c;font-weight:900;font-size:14px;box-shadow:0 7px 28px #e8ad4a30}
+.welcome-fireworks{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.welcome-fireworks i{position:absolute;left:var(--x);top:var(--y);width:5px;height:5px;border-radius:50%;background:#ffd782;box-shadow:0 0 0 0 #ffd782,0 0 14px 4px #e7a84b;animation:welcomeBurst 1.8s ease-out infinite;animation-delay:var(--d)}
+.welcome-fireworks i:nth-child(1){--x:15%;--y:23%;--d:0s}.welcome-fireworks i:nth-child(2){--x:83%;--y:21%;--d:.3s}.welcome-fireworks i:nth-child(3){--x:23%;--y:70%;--d:.7s}.welcome-fireworks i:nth-child(4){--x:77%;--y:75%;--d:.5s}.welcome-fireworks i:nth-child(5){--x:50%;--y:12%;--d:1s}.welcome-fireworks i:nth-child(6){--x:8%;--y:49%;--d:.9s}.welcome-fireworks i:nth-child(7){--x:91%;--y:48%;--d:1.2s}.welcome-fireworks i:nth-child(8){--x:50%;--y:87%;--d:.2s}
+@keyframes welcomeBurst{0%{opacity:0;transform:scale(.2);box-shadow:0 0 0 0 #ffd782}20%{opacity:1}75%{opacity:.8;box-shadow:0 -24px 0 -1px #ffd782,21px -12px 0 -1px #f18b65,22px 13px 0 -1px #fff0b0,0 24px 0 -1px #f18b65,-21px 13px 0 -1px #ffd782,-22px -12px 0 -1px #fff0b0}100%{opacity:0;transform:scale(1.1);box-shadow:0 0 0 0 transparent}}
+@keyframes welcomePop{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes welcomeSpark{from{opacity:.55;transform:scale(.92)}to{opacity:1;transform:scale(1.08)}}
+@media(prefers-reduced-motion:reduce){.welcome-content,.welcome-spark,.welcome-fireworks i{animation:none}}
+</style>
 
 <style id="inkos-premium-theme">
 :root{
