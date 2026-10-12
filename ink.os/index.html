@@ -706,7 +706,7 @@ table{border-collapse:separate!important;border-spacing:0!important;font-size:12
 .auth-msg{font-size:12px;line-height:1.5;margin-top:12px;color:#a89e98;min-height:18px;overflow-wrap:anywhere}
 .auth-msg.error{color:#ff817b}.auth-msg.success{color:#69db9a}
 .auth-note{font-size:10px;line-height:1.5;color:#756a64;margin-top:16px;text-align:center}
-#authAccountBtn{max-width:180px;overflow:hidden;text-overflow:ellipsis}
+#authAccountBtn{max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:520px){.auth-card{padding:22px 18px}.auth-brand{font-size:25px}#authAccountBtn{display:inline-flex;max-width:76px;padding:0 6px;font-size:10px}}
 
 </style>
@@ -761,7 +761,7 @@ table{border-collapse:separate!important;border-spacing:0!important;font-size:12
     <div class="brand" onclick="go('dashboard')" style="cursor:pointer"><span class="logo">INK<b>.OS</b></span><span class="studio-tier">TATTOO STUDIO · PREMIUM</span><span id="topbarSub"></span></div>
     <div style="display:flex;gap:8px;align-items:center">
       <span id="accountSyncState" class="small dim" style="align-self:center;font-size:10px"></span>
-      <button class="btn btn-sm" id="authAccountBtn" type="button" title="Нажмите, чтобы выйти из аккаунта">Аккаунт</button>
+      <button class="btn btn-sm" id="authAccountBtn" type="button" title="Выйти из аккаунта">Выйти</button>
       <button class="bell-btn" id="searchBtn" aria-label="Поиск">
         <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg>
       </button>
@@ -840,20 +840,43 @@ async function authRequest(path,body,token){
 }
 function saveAuthSession(session){
   authSession=session||null;
+  // Keep the Supabase refresh token across browser/app restarts until the user explicitly signs out.
   try{if(session)localStorage.setItem(INKOS_AUTH_KEY,JSON.stringify(session));else localStorage.removeItem(INKOS_AUTH_KEY);}catch(e){}
   currentAuthUser=session?.user||null;
   const label=document.getElementById('authAccountBtn');
-  if(label){label.textContent=currentAuthUser?.email||'Аккаунт';label.title=currentAuthUser?.email||'';}
+  if(label){
+    label.textContent=currentAuthUser?'Выйти':'Аккаунт';
+    label.title=currentAuthUser?'Выйти из аккаунта '+(currentAuthUser.email||''):'Войти в аккаунт';
+    label.setAttribute('aria-label',currentAuthUser?'Выйти из аккаунта':'Аккаунт');
+  }
 }
 async function restoreAuthSession(){
-  let saved=null;try{saved=JSON.parse(localStorage.getItem(INKOS_AUTH_KEY)||'null');}catch(e){}
+  let saved=null;
+  try{saved=JSON.parse(localStorage.getItem(INKOS_AUTH_KEY)||'null');}catch(e){}
   if(!saved?.refresh_token){saveAuthSession(null);return false;}
+  const now=Date.now()/1000;
+  // Reuse the persisted access token when it is still valid; no password is needed.
+  if(saved.access_token&&saved.user&&saved.expires_at&&saved.expires_at>now+60){
+    saveAuthSession(saved);return true;
+  }
   try{
-    if(saved.expires_at && saved.expires_at>Date.now()/1000+60){saveAuthSession(saved);return !!currentAuthUser;}
     const data=await authRequest('/auth/v1/token?grant_type=refresh_token',{refresh_token:saved.refresh_token});
+    if(!data.access_token||!data.user)throw new Error('Сервер не вернул обновлённую сессию.');
     saveAuthSession({...data,expires_at:Date.now()/1000+Number(data.expires_in||3600)});
-    return !!currentAuthUser;
-  }catch(e){saveAuthSession(null);return false;}
+    return true;
+  }catch(e){
+    const msg=String(e?.message||e);
+    // Do not erase a saved session for a temporary offline/server error.
+    if(/invalid refresh token|refresh token.*(expired|invalid)|session.*not found/i.test(msg)){
+      saveAuthSession(null);
+    }else if(saved.access_token&&saved.user&&saved.expires_at&&saved.expires_at>now){
+      saveAuthSession(saved);return true;
+    }else{
+      authSession=saved;currentAuthUser=saved.user||null;
+      console.warn('INK.OS: session refresh deferred; saved session retained.',e);
+    }
+    return false;
+  }
 }
 async function authPasswordSignIn(email,password){
   const data=await authRequest('/auth/v1/token?grant_type=password',{email,password});
@@ -866,8 +889,12 @@ async function authSignUp(email,password,displayName){
   return data;
 }
 async function authSignOut(){
+  if(!currentAuthUser)return;
+  if(!confirm('Выйти из аккаунта? Данные уже сохранены в облаке, при следующем входе можно будет продолжить работу.'))return;
+  const label=document.getElementById('authAccountBtn');
+  if(label){label.disabled=true;label.textContent='Выход…';}
   await syncAccountNow();
-  try{if(authSession?.access_token)await authRequest('/auth/v1/logout',{},authSession.access_token);}catch(e){}
+  try{if(authSession?.access_token)await authRequest('/auth/v1/logout',{},authSession.access_token);}catch(e){console.warn('INK.OS sign out:',e);}
   saveAuthSession(null);accountDataReady=false;
   location.reload();
 }
