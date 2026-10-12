@@ -2195,6 +2195,22 @@ function openContactFillSheet(clientId,key,label){
     if(currentRoute==='clients') renderClientsList();
   };
 }
+function openClientPhotoSearch(clientId){
+  const client=S.clients.find(c=>c.id===clientId);if(!client)return;
+  openSheet('Поиск фотографии клиента', '<form id="clientPhotoSearchForm"><div class="dim small" style="margin-bottom:10px">Укажи соцсеть и ссылку на профиль. Приложение определит источник и попробует найти публичный аватар.</div><label>Где искать фото</label><select name="provider" class="input"><option value="auto">Определить автоматически по ссылке</option><option value="telegram">Telegram</option><option value="vk">ВКонтакте</option><option value="instagram">Instagram</option></select><label style="margin-top:10px">Ссылка на профиль или @username</label><input name="profile" value="'+esc(client.profileLink||client.telegram||client.vk||client.instagram||'')+'" placeholder="https://t.me/username или @username" required><button class="btn btn-primary btn-block" style="margin-top:14px" type="submit">'+icon('search')+' Найти и добавить фото</button></form>',{centered:true});
+  const form=$('#clientPhotoSearchForm');
+  form.onsubmit=async ev=>{
+    ev.preventDefault();const raw=String(form.querySelector('[name=profile]').value||'').trim();let provider=form.querySelector('[name=provider]').value;
+    if(!raw){toast('Вставь ссылку на профиль');return;}
+    if(provider==='auto'){if(/(?:t\.me|telegram\.me)/i.test(raw))provider='telegram';else if(/vk\.com/i.test(raw))provider='vk';else if(/instagram\.com/i.test(raw))provider='instagram';else if(raw.startsWith('@')||/^[a-z][a-z0-9_]{3,}$/i.test(raw))provider='telegram';else{toast('Не удалось определить соцсеть. Выбери её вручную.');return;}}
+    const normalized=raw.replace(/^@/,'').trim();client[provider]=normalized;
+    client.profileLink=/^https?:\/\//i.test(raw)?raw:(provider==='telegram'?'https://t.me/'+normalized:provider==='vk'?'https://vk.com/'+normalized:'https://instagram.com/'+normalized);
+    const foundUrl=autoClientAvatarUrl(client);if(!foundUrl){toast('Не удалось распознать ссылку. Проверь адрес профиля.');return;}
+    client.avatar=foundUrl;await idbPut('clients',client);const idx=S.clients.findIndex(c=>c.id===client.id);if(idx>=0)S.clients[idx]=client;
+    closeSheet();openClient(clientId,'info');toast('Источник определён. Ищу публичную фотографию…');
+    const ok=await downloadClientAvatar(client);if(ok){toast('Фото найдено и сохранено в карточке');openClient(clientId,'info');}else toast('Ссылка сохранена. Если фото не появилось, профиль может быть закрыт или соцсеть блокирует загрузку.');
+  };
+}
 function renderClientsList(){
   // Автоматически ищем аватар для существующих карточек без фото, если указан профиль соцсети.
   S.clients.forEach(c=>{if(c&&!c.avatar&&(c.telegram||c.vk||c.instagram||c.profileLink))autoImportClientAvatar(c);});
@@ -2690,6 +2706,7 @@ function openClient(id,tab){
     <button class="btn" onclick="openMessageTemplates('${id}')">${icon('message')} Сообщение</button>
     <button class="btn" onclick="window.startVkLink('${id}')">Подключить VK</button>
     <button class="btn" onclick="window.startTelegramLink('${id}')">Подключить Telegram</button>
+    <button class="btn" onclick="openClientPhotoSearch('${id}')">${icon('search')} Найти фото</button>
   </div>
   <div class="cl-tabs">
     ${['info','history','projects','photos','anketa'].map(t=>`<button data-t="${t}" class="${tab===t?'active':''}">${{info:'Основное',history:'История',projects:'Проекты',photos:'Фото',anketa:'Анкета'}[t]}</button>`).join('')}
