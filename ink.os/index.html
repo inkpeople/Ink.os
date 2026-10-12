@@ -2532,6 +2532,42 @@ function deleteClient(id){
     trashDelete({store:'clients',listKey:'clients',id,message:'Клиент удалён.',auditEntity:'Клиент',auditLabel:c?c.name:'',onChange:()=>{ go('clients'); }});
   });
 }
+async function uploadClientPhotos(id){
+  const inp=document.getElementById('clientPhotosInput');
+  if(!inp){toast('Не удалось открыть загрузку фото');return;}
+  inp.click();
+}
+async function handleClientPhotosUpload(id,inp){
+  const files=Array.from(inp.files||[]).filter(f=>f.type&&f.type.startsWith('image/'));
+  if(!files.length)return;
+  const status=document.getElementById('clientPhotosStatus');
+  const setStatus=t=>{if(status)status.textContent=t;};
+  const loadImage=url=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Не удалось открыть изображение'));im.src=url;});
+  let saved=0;
+  try{
+    for(let i=0;i<files.length;i++){
+      setStatus('Сохраняю фото '+(i+1)+' из '+files.length+'…');
+      const file=files[i];
+      const source=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('Не удалось прочитать файл'));reader.readAsDataURL(file);});
+      const im=await loadImage(source);
+      const scale=Math.min(1,1400/Math.max(im.width,im.height));
+      const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(im.width*scale));cv.height=Math.max(1,Math.round(im.height*scale));
+      const ctx=cv.getContext('2d');ctx.drawImage(im,0,0,cv.width,cv.height);
+      const dataUrl=cv.toDataURL('image/jpeg',0.8);
+      const obj={id:uid(),clientId:id,dataUrl,processedDataUrl:dataUrl,history:['auto-compressed'],createdAt:Date.now(),tag:'',fileName:String(file.name||'').slice(0,120)};
+      await idbPut('photos',obj);
+      S.photos.push(obj);saved++;
+    }
+    setStatus('Готово: сохранено '+saved+' фото. Синхронизация с аккаунтом запущена.');
+    toast('Фото клиента сохранены автоматически');
+    openClient(id,'photos');
+  }catch(e){
+    console.error('Client photo upload:',e);
+    setStatus('Не все фото удалось сохранить. Проверьте свободное место и повторите загрузку.');
+    toast('Ошибка при сохранении фото');
+    if(saved)openClient(id,'photos');
+  }finally{inp.value='';}
+}
 function pickClientAvatar(id){
   const c=S.clients.find(x=>x.id===id); if(!c) return;
   const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
@@ -2669,7 +2705,17 @@ function openClient(id,tab){
   } else if(tab==='payments'){
     body.innerHTML = payments.length? `<table><tr><th>Дата</th><th>Сумма</th><th>Способ</th><th>Статус</th></tr>${payments.map(p=>`<tr><td>${fmtDate(p.date)}</td><td>${fmtMoney(p.amount)}</td><td>${p.method||''}</td><td>${p.status||''}</td></tr>`).join('')}</table>` : '<p class="dim">Оплат нет.</p>';
   } else if(tab==='photos'){
-    body.innerHTML = photos.length? `<div class="grid grid-3">${photos.map(p=>`<img src="${p.processedDataUrl||p.dataUrl}" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover">`).join('')}</div>` : '<p class="dim">Фото нет. Загрузите в разделе «Фото».</p>';
+    body.innerHTML = `
+      <div class="row" style="justify-content:space-between;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <div><b>Фотографии клиента</b><div class="small dim">Выберите фото — они сохранятся автоматически</div></div>
+        <button class="btn btn-primary btn-sm" type="button" onclick="uploadClientPhotos('${id}')">${icon('camera')} Добавить фото</button>
+      </div>
+      <input id="clientPhotosInput" type="file" accept="image/*" multiple class="hidden">
+      <div id="clientPhotosStatus" class="small dim" style="margin-bottom:8px"></div>
+      ${photos.length? `<div class="grid grid-3">${photos.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).map(p=>`<div style="position:relative;min-width:0"><img src="${p.processedDataUrl||p.dataUrl}" alt="Фото клиента" loading="lazy" style="width:100%;border-radius:8px;aspect-ratio:1;object-fit:cover;display:block"><div class="small dim" style="margin-top:4px">${p.createdAt?new Date(p.createdAt).toLocaleDateString('ru-RU'):''}</div></div>`).join('')}</div>` : '<div class="card"><p class="dim" style="margin:0">Фотографий пока нет. Нажмите «Добавить фото» — после выбора они сохранятся автоматически.</p></div>'}
+    `;
+    const clientPhotosInput=$('#clientPhotosInput');
+    if(clientPhotosInput) clientPhotosInput.onchange=()=>handleClientPhotosUpload(id,clientPhotosInput);
   } else if(tab==='anketa'){
     const consents=S.consents.filter(x=>x.clientId===id);
     body.innerHTML=`
