@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-password-eye-v32';
+const CACHE_NAME = 'ink-os-shell-persistent-login-v33';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './vk-link.js', './client-retention.js'];
 
 self.addEventListener('install', event => {
