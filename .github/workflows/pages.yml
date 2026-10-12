@@ -28,9 +28,16 @@ jobs:
           const fs = require('fs');
           const vm = require('vm');
           const html = fs.readFileSync('ink.os/index.html', 'utf8');
-          const scripts = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)]
-            .map(match => match[1])
-            .filter(source => source.trim());
+          const scripts = [];
+          const parts = html.split(/<script\\b/i).slice(1);
+          for (const part of parts) {
+            const close = part.indexOf('</script>');
+            if (close < 0) continue;
+            const open = part.indexOf('>');
+            if (open < 0 || open > close) continue;
+            const source = part.slice(open + 1, close);
+            if (source.trim()) scripts.push(source);
+          }
           scripts.forEach((source, index) => {
             try {
               new vm.Script(source, { filename: `inline-script-${index + 1}.js` });
