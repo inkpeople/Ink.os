@@ -3092,6 +3092,25 @@ RENDERERS.finance=function(){
   const seriesRange = financePeriod==='all' ? periodRangeISO('year',0) : {start,end};
   const chartPoints=buildIncomeSeries(seriesRange.start,seriesRange.end,granularity);
 
+  // Контрольные показатели: финансовые операции считаются отдельно от записей,
+  // средний чек — по завершённым сеансам с указанной стоимостью.
+  const financeNow=new Date();
+  const financeMonthKey=financeISODate(new Date(financeNow.getFullYear(),financeNow.getMonth(),1)).slice(0,7);
+  const financeYearKey=String(financeNow.getFullYear());
+  const financeMonthItems=(S.finance||[]).filter(f=>String(f.date||'').slice(0,7)===financeMonthKey);
+  const financeYearItems=(S.finance||[]).filter(f=>String(f.date||'').slice(0,4)===financeYearKey);
+  const financeSum=(arr,type)=>arr.filter(f=>f.type===type).reduce((sum,f)=>sum+Number(f.amount||0),0);
+  const financeMonthIncome=financeSum(financeMonthItems,'income');
+  const financeMonthExpense=financeSum(financeMonthItems,'expense');
+  const financeYearIncome=financeSum(financeYearItems,'income');
+  const financeYearExpense=financeSum(financeYearItems,'expense');
+  const financeCompletedPriced=S.events.filter(e=>String(e.date||'').slice(0,7)===financeMonthKey&&e.status==='completed'&&['session','consult','correction','model'].includes(e.type)&&Number(e.cost)>0);
+  const financeAvgCheck=financeCompletedPriced.length?financeCompletedPriced.reduce((sum,e)=>sum+Number(e.cost||0),0)/financeCompletedPriced.length:0;
+  const financeTaxRate=Math.max(0,Number(S.settings.taxRate||0));
+  const financeTax=financeMonthIncome*financeTaxRate/100;
+  const financeNet=financeMonthIncome-financeMonthExpense-financeTax;
+  const financeGoal=Math.max(0,Number(S.settings.monthGoal||0));
+
   $('#content').innerHTML=`
   <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
     <span></span>
@@ -3112,6 +3131,23 @@ RENDERERS.finance=function(){
       <div class="finance-stat"><span>Записей за период</span><strong>${recordsCount}</strong></div>
       <div class="finance-stat"><span>Средний чек</span><strong>${finVal(fmtMoney(avgCheck))}</strong></div>
     </div>
+  </section>
+  <section class="card" style="margin-bottom:14px">
+    <div class="row" style="margin-bottom:10px;align-items:flex-start">
+      <div><h3 style="margin:0">Финансовые итоги</h3><div class="small dim">Текущий месяц · ${financeNow.toLocaleDateString('ru-RU',{month:'short',year:'numeric'})}</div></div>
+      <button class="btn btn-sm" onclick="go('analytics')">Настроить цель и налог</button>
+    </div>
+    <div class="grid grid-2">
+      <div class="stat"><div class="lbl">Получено</div><div class="num">${finVal(fmtMoney(financeMonthIncome))}</div><div class="small dim">По сохранённым финансовым операциям · будущие записи не включены</div></div>
+      <div class="stat"><div class="lbl">Рабочие расходы</div><div class="num">${finVal(fmtMoney(financeMonthExpense))}</div><div class="small dim">За текущий месяц</div></div>
+      <div class="stat"><div class="lbl">Остаток после расходов и налога</div><div class="num">${finVal(fmtMoney(financeNet))}</div><div class="small dim">Налог рассчитан по ставке ${financeTaxRate}%</div></div>
+      <div class="stat"><div class="lbl">Расчётный налог</div><div class="num">${finVal(fmtMoney(financeTax))}</div><div class="small dim">От дохода текущего месяца</div></div>
+      <div class="stat"><div class="lbl">Заработано за год</div><div class="num">${finVal(fmtMoney(financeYearIncome))}</div><div class="small dim">${financeYearKey} год</div></div>
+      <div class="stat"><div class="lbl">Расходы за год</div><div class="num">${finVal(fmtMoney(financeYearExpense))}</div><div class="small dim">${financeYearKey} год</div></div>
+      <div class="stat"><div class="lbl">Средний чек за месяц</div><div class="num">${finVal(fmtMoney(financeAvgCheck))}</div><div class="small dim">${financeCompletedPriced.length} завершённых сеансов с указанной ценой</div></div>
+      <div class="stat"><div class="lbl">Осталось до цели</div><div class="num">${financeGoal?finVal(fmtMoney(Math.max(0,financeGoal-financeMonthIncome))):'Цель не задана'}</div><div class="small dim">${financeGoal?'Цель: '+finVal(fmtMoney(financeGoal)):'Нажмите «Настроить цель и налог»'}</div></div>
+    </div>
+    <div class="row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span>Доход минус расходы</span><b>${finVal(fmtMoney(financeMonthIncome-financeMonthExpense))}</b></div>
   </section>
   ${financePeriod!=='all'?`<div class="fin-forecast" onclick="openForecastSheet()">
     <div><div class="fl">Предстоит заработать ${fcLabel}</div><div class="fv">+${finVal(fmtMoney(fcExpected))}</div><div class="small dim">${fcList.length?fcList.length+' '+pl(fcList.length,'запись','записи','записей')+' с остатком':'Нет будущих записей с остатком'}</div></div>
