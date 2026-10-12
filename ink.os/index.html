@@ -3373,17 +3373,18 @@ const MON=['янв','фев','мар','апр','май','июн','июл','ав�
 let anMonths=6;
 function incomeOf(f){ return f.type==='income'; }
 RENDERERS.analytics=function(){
-  const now=new Date(), ym=now.toISOString().slice(0,7), rate=Number(S.settings.taxRate||0), goal=Number(S.settings.monthGoal||0);
+  const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'), rate=Number(S.settings.taxRate||0), goal=Number(S.settings.monthGoal||0);
   const fin=S.finance||[]; const sum=(arr)=>arr.reduce((a,f)=>a+Number(f.amount||0),0);
   const yearKey=String(now.getFullYear());
-  const mInc=sum(fin.filter(f=>f.type==='income'&&(f.date||'').startsWith(ym))), mExp=sum(fin.filter(f=>f.type==='expense'&&(f.date||'').startsWith(ym)));
-  const yInc=sum(fin.filter(f=>f.type==='income'&&(f.date||'').startsWith(yearKey))), yExp=sum(fin.filter(f=>f.type==='expense'&&(f.date||'').startsWith(yearKey)));
+  const incomeEntries=financeIncomeEntries();
+  const mInc=sum(incomeEntries.filter(f=>(f.date||'').startsWith(ym))), mExp=sum(fin.filter(f=>f.type==='expense'&&(f.date||'').startsWith(ym)));
+  const yInc=sum(incomeEntries.filter(f=>(f.date||'').startsWith(yearKey))), yExp=sum(fin.filter(f=>f.type==='expense'&&(f.date||'').startsWith(yearKey)));
   const monthDone=S.events.filter(e=>e.status==='completed'&&(e.date||'').startsWith(ym)&&Number(e.cost||0)>0);
   const avgCheck=monthDone.length?Math.round(monthDone.reduce((a,e)=>a+Number(e.cost||0),0)/monthDone.length):0;
   const remaining=goal>0?Math.max(0,goal-mInc):null;
   const tax=mInc*rate/100, net=mInc-mExp-tax, pct=goal?Math.min(100,Math.round(mInc/goal*100)):0;
   const from=new Date(now.getFullYear(),now.getMonth()-(anMonths-1),1).toISOString().slice(0,10);
-  const months=[]; for(let i=anMonths-1;i>=0;i--){ const d=new Date(now.getFullYear(),now.getMonth()-i,1); const k=d.toISOString().slice(0,7); months.push({k,l:MON[d.getMonth()],v:sum(fin.filter(f=>incomeOf(f)&&(f.date||'').startsWith(k)))}); }
+  const months=[]; for(let i=anMonths-1;i>=0;i--){ const d=new Date(now.getFullYear(),now.getMonth()-i,1); const k=d.toISOString().slice(0,7); months.push({k,l:MON[d.getMonth()],v:sum(incomeEntries.filter(f=>(f.date||'').startsWith(k)))}); }
   const mx=Math.max(1,...months.map(m=>m.v));
   const done=S.events.filter(e=>e.status==='completed'&&e.date>=from);
   const group=(fn,val)=>{ const a={}; done.forEach(e=>{ const k=fn(e); if(k){ a[k]=a[k]||{n:0,s:0}; a[k].n++; a[k].s+=Number(e.cost||0); } }); return Object.entries(a).sort((p,q)=>q[1].s-p[1].s||q[1].n-p[1].n).slice(0,6); };
@@ -4025,7 +4026,7 @@ function trendHtml(pct){
   return `<span class="trend ${up?'up':'down'}">${up?'↗':'↘'} ${up?'+':''}${pct}%</span>`;
 }
 function financeIncomeEntries(){
-  const payments=Array.isArray(S.payments)?S.payments.filter(p=>p&&typeof p==='object'&&Number(p.amount||0)>0):[];
+  const payments=Array.isArray(S.payments)?S.payments.filter(p=>p&&typeof p==='object'&&Number(p.amount||0)>0&&p.status!=='Возвращено'):[];
   const paidEventIds=new Set(payments.map(p=>p.eventId).filter(Boolean));
   const paymentEntries=payments.map(p=>({type:'income',date:p.date,amount:Number(p.amount||0),eventId:p.eventId,source:'payment'}));
   const extraEntries=(Array.isArray(S.finance)?S.finance:[]).filter(f=>f&&f.type==='income'&&!(f.eventId&&paidEventIds.has(f.eventId))).map(f=>({...f,source:'finance'}));
