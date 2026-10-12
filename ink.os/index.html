@@ -4251,9 +4251,8 @@ function calculateFinanceMonth(){
     return Math.max(Number(e.bookingAmount||0),payments.reduce((sum,p)=>sum+Number(p.amount||0),0));
   };
   const actualSessionIncome=completed.reduce((sum,e)=>sum+Number(e.cost||0),0);
-  const forecastRows=upcoming.map(e=>({e,client:(S.clients||[]).find(c=>String(c.id)===String(e.clientId)),rest:Math.max(0,Number(e.cost||0)-paidFor(e))})).filter(x=>x.rest>0);
+  const forecastRows=upcoming.map(e=>({e,rest:Math.max(0,Number(e.cost||0)-paidFor(e))})).filter(x=>x.rest>0);
   const forecast=forecastRows.reduce((sum,x)=>sum+x.rest,0);
-  const linkedIds=new Set((S.events||[]).filter(e=>e.id!=null).map(e=>String(e.id)));
   const extraIncome=(S.finance||[]).filter(f=>f&&f.type==='income'&&String(f.date||'').startsWith(monthKey)&&!f.eventId&&Number(f.amount||0)>0).reduce((sum,f)=>sum+Number(f.amount||0),0);
   const monthIncome=actualSessionIncome+extraIncome;
   const yearEvents=(S.events||[]).filter(e=>e&&typeof e.date==='string'&&e.date.startsWith(yearKey)&&sessionTypes.includes(e.type)&&e.status==='completed'&&Number(e.cost||0)>0);
@@ -4266,25 +4265,25 @@ function calculateFinanceMonth(){
   const clientName=e=>{const c=(S.clients||[]).find(x=>String(x.id)===String(e.clientId));return esc(c?.name||e.clientName||'Клиент без имени');};
   const doneRows=completed.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(e=>'<tr><td>'+esc(fmtDate(e.date))+'</td><td>'+clientName(e)+'</td><td>'+money(e.cost)+'</td></tr>').join('');
   const forecastList=forecastRows.slice().sort((a,b)=>String(a.e.date).localeCompare(String(b.e.date))).map(x=>'<tr><td>'+esc(fmtDate(x.e.date))+'</td><td>'+clientName(x.e)+'</td><td>'+money(x.e.cost)+'</td><td>'+money(paidFor(x.e))+'</td><td><b>'+money(x.rest)+'</b></td></tr>').join('');
-  const expenseRows=(S.finance||[]).filter(f=>f&&f.type==='expense'&&String(f.date||'').startsWith(yearKey)).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).map(f=>'<tr><td>'+esc(fmtDate(f.date))+'</td><td>'+esc(EXPENSE_CATEGORIES[f.category]||f.category||'Расход')</td><td>'+money(f.amount)+'</td><td>'+esc(f.comment||'—')+'</td></tr>').join('');
-  openSheet('Расчёт месяца · '+MON[now.getMonth()]+' '+yearKey,'
-    <p class="small dim">Расчёт по сеансам календаря и сохранённым финансовым расходам. Данные не изменяются. Завершённые сеансы считаются фактическим заработком по стоимости записи; предстоящие — прогнозом за вычетом предоплат и платежей.</p>
+  const expenseRows=(S.finance||[]).filter(f=>f&&f.type==='expense'&&String(f.date||'').startsWith(yearKey)).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).map(f=>'<tr><td>'+esc(fmtDate(f.date))+'</td><td>'+esc(EXPENSE_CATEGORIES[f.category]||f.category||'Расход')+'</td><td>'+money(f.amount)+'</td><td>'+esc(f.comment||'—')+'</td></tr>').join('');
+  openSheet('Расчёт месяца · '+MON[now.getMonth()]+' '+yearKey,`
+    <p class="small dim">Расчёт по календарю и сохранённым финансовым расходам. Данные не изменяются. Завершённые сеансы считаются заработком по цене записи; будущие — прогнозом за вычетом предоплат и платежей.</p>
     <div class="finance-summary-grid">
-      <div class="finance-stat"><span>Заработано за месяц</span><b>'+money(monthIncome)+'</b><small>Завершённые сеансы + прочий доход</small></div>
-      <div class="finance-stat"><span>Ещё ожидается</span><b>'+money(forecast)+'</b><small>'+forecastRows.length+' будущих записей с остатком</small></div>
-      <div class="finance-stat"><span>Средний чек</span><b>'+money(average)+'</b><small>'+completed.length+' завершённых записей с ценой</small></div>
-      <div class="finance-stat"><span>Доход за '+yearKey+'</span><b>'+money(yearIncome)+'</b><small>'+yearEvents.length+' завершённых сеансов + прочий доход</small></div>
-      <div class="finance-stat"><span>Расходы за '+yearKey+'</span><b>'+money(yearExpense)+'</b><small>По сохранённым операциям типа «Расход»</small></div>
-      <div class="finance-stat finance-stat-net"><span>Прибыль за '+yearKey+'</span><b>'+money(yearProfit)+'</b><small>Годовой доход минус учтённые расходы</small></div>
+      <div class="finance-stat"><span>Заработано за месяц</span><b>${money(monthIncome)}</b><small>Завершённые сеансы + прочий доход</small></div>
+      <div class="finance-stat"><span>Ещё ожидается</span><b>${money(forecast)}</b><small>${forecastRows.length} будущих записей с остатком</small></div>
+      <div class="finance-stat"><span>Средний чек</span><b>${money(average)}</b><small>${completed.length} завершённых записей с ценой</small></div>
+      <div class="finance-stat"><span>Доход за ${yearKey}</span><b>${money(yearIncome)}</b><small>${yearEvents.length} завершённых сеансов + прочий доход</small></div>
+      <div class="finance-stat"><span>Расходы за ${yearKey}</span><b>${money(yearExpense)}</b><small>По сохранённым операциям типа «Расход»</small></div>
+      <div class="finance-stat finance-stat-net"><span>Прибыль за ${yearKey}</span><b>${money(yearProfit)}</b><small>Годовой доход минус учтённые расходы</small></div>
     </div>
     <h4 style="margin-top:16px">Сеансы, которые состоялись</h4>
-    <div class="table-wrap"><table><tr><th>Дата</th><th>Клиент</th><th>Заработано</th></tr>'+(doneRows||'<tr><td colspan="3">Нет завершённых сеансов с ценой за этот месяц.</td></tr>')+'</table></div>
+    <div class="table-wrap"><table><tr><th>Дата</th><th>Клиент</th><th>Заработано</th></tr>${doneRows||'<tr><td colspan="3">Нет завершённых сеансов с ценой за этот месяц.</td></tr>'}</table></div>
     <h4 style="margin-top:16px">Сеансы впереди — ожидаемый доход</h4>
-    <div class="table-wrap"><table><tr><th>Дата</th><th>Клиент</th><th>Цена</th><th>Оплачено</th><th>Остаток</th></tr>'+(forecastList||'<tr><td colspan="5">Нет будущих записей с неоплаченным остатком.</td></tr>')+'</table></div>
+    <div class="table-wrap"><table><tr><th>Дата</th><th>Клиент</th><th>Цена</th><th>Оплачено</th><th>Остаток</th></tr>${forecastList||'<tr><td colspan="5">Нет будущих записей с неоплаченным остатком.</td></tr>'}</table></div>
     <h4 style="margin-top:16px">Расходы за год</h4>
-    <div class="table-wrap"><table><tr><th>Дата</th><th>Категория</th><th>Сумма</th><th>Комментарий</th></tr>'+(expenseRows||'<tr><td colspan="4">Нет сохранённых расходов за этот год.</td></tr>')+'</table></div>
-    <p class="small dim">Важно: если стоимость завершённого сеанса не равна реально полученной оплате, скорректируйте стоимость записи или внесите оплату в карточке клиента. В расчёт расходов попадают только сохранённые финансовые операции — закупки из склада сами по себе не считаются расходом.</p>
-  ');
+    <div class="table-wrap"><table><tr><th>Дата</th><th>Категория</th><th>Сумма</th><th>Комментарий</th></tr>${expenseRows||'<tr><td colspan="4">Нет сохранённых расходов за этот год.</td></tr>'}</table></div>
+    <p class="small dim">В расчёт расходов попадают только сохранённые финансовые операции — закупки из склада сами по себе не считаются расходом.</p>
+  `);
 }
 
 function openFinanceDiagnostics(){
