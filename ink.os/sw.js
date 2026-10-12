@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ink-os-shell-client-photo-search-v39';
+const CACHE_NAME = 'ink-os-shell-finance-date-fix-v40';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './vk-link.js', './client-retention.js'];
 
 self.addEventListener('install', event => {
