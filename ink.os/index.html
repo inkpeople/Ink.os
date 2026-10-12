@@ -4110,17 +4110,23 @@ RENDERERS.finance=function(){
   <section class="finance-premium-summary finance-summary-compact">
     <div class="finance-summary-top">
       <div>
-        <div class="finance-eyebrow">ФИНАНСЫ · ${MON[now.getMonth()]} ${now.getFullYear()}</div>
+        <div class="finance-eyebrow">ТЕКУЩИЙ МЕСЯЦ · ${MON[now.getMonth()]} ${now.getFullYear()}</div>
         <div class="finance-summary-total">${finVal(fmtMoney(monthIncome))}</div>
-        <div class="finance-summary-caption">Доход за текущий месяц</div>
+        <div class="finance-summary-caption">Фактически записанный доход за месяц</div>
       </div>
       <div class="finance-summary-mark">₽</div>
     </div>
     <div class="finance-summary-grid">
-      <div class="finance-stat"><span>Расход за месяц</span><b>${finVal(fmtMoney(monthExpense))}</b></div>
-      <div class="finance-stat"><span>Прибыль за месяц</span><b>${finVal(fmtMoney(monthIncome-monthExpense))}</b></div>
-      <div class="finance-stat"><span>Доход за год</span><b>${finVal(fmtMoney(yearIncome))}</b><small>${now.getFullYear()} год</small></div>
-      <div class="finance-stat"><span>Средний чек за месяц</span><b>${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small>${completedMonthEvents.length?completedMonthEvents.length+' завершённых сеансов':'Нет завершённых сеансов с ценой'}</small></div>
+      <div class="finance-stat"><span>Рабочие расходы</span><b>${finVal(fmtMoney(monthExpense))}</b><small>За текущий месяц</small></div>
+      <div class="finance-stat"><span>Остаток после расходов и налога</span><b>${finVal(fmtMoney(monthNet))}</b><small>Налог по ставке ${taxRate}%</small></div>
+      <div class="finance-stat"><span>Заработано за год</span><b>${finVal(fmtMoney(yearIncome))}</b><small>${now.getFullYear()} год</small></div>
+      <div class="finance-stat"><span>Расходы за год</span><b>${finVal(fmtMoney(yearExpense))}</b><small>${now.getFullYear()} год</small></div>
+      <div class="finance-stat"><span>Средний чек</span><b>${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small>${completedMonthEvents.length?completedMonthEvents.length+' завершённых сеансов с ценой':'Нет завершённых сеансов с ценой'}</small></div>
+      <div class="finance-stat"><span>До месячной цели</span><b>${monthlyGoal?finVal(fmtMoney(monthRemaining)):'Не задана'}</b><small>${monthlyGoal?'Выполнено '+monthProgress+'% цели':'Задайте цель в настройках ниже'}</small>${monthlyGoal?'<div class="finance-goal-track" style="margin-top:8px"><div style="width:'+monthProgress+'%"></div></div>':''}</div>
+    </div>
+    <div class="finance-summary-foot">
+      <span>Расчётный налог: <b>${finVal(fmtMoney(monthTax))}</b></span>
+      <span>Доход минус расходы: <b>${finVal(fmtMoney(monthIncome-monthExpense))}</b></span>
     </div>
   </section>
   ${financePeriod!=='month'?`<div class="fin-pair finance-period-pair">
