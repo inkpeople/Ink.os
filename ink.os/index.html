@@ -2197,12 +2197,14 @@ function openContactFillSheet(clientId,key,label){
 }
 function openClientPhotoSearch(clientId){
   const client=S.clients.find(c=>c.id===clientId);if(!client)return;
-  openSheet('Поиск фотографии клиента', '<form id="clientPhotoSearchForm"><div class="dim small" style="margin-bottom:10px">Укажи соцсеть и ссылку на профиль. Приложение определит источник и попробует найти публичный аватар.</div><label>Где искать фото</label><select name="provider" class="input"><option value="auto">Определить автоматически по ссылке</option><option value="telegram">Telegram</option><option value="vk">ВКонтакте</option><option value="instagram">Instagram</option></select><label style="margin-top:10px">Ссылка на профиль или @username</label><input name="profile" value="'+esc(client.profileLink||client.telegram||client.vk||client.instagram||'')+'" placeholder="https://t.me/username или @username" required><button class="btn btn-primary btn-block" style="margin-top:14px" type="submit">'+icon('search')+' Найти и добавить фото</button></form>',{centered:true});
+  openSheet('Поиск фотографии клиента', '<form id="clientPhotoSearchForm"><div class="dim small" style="margin-bottom:10px">Укажи соцсеть и ссылку на профиль. Приложение определит источник и попробует найти публичный аватар.</div><label>Где искать фото</label><select name="provider" class="input"><option value="auto">Определить автоматически по ссылке</option><option value="telegram">Telegram</option><option value="vk">ВКонтакте</option><option value="instagram">Instagram</option></select><label style="margin-top:10px">Ссылка на профиль или @username</label><input name="profile" value="'+esc(client.vk||client.profileLink||client.telegram||client.instagram||'')+'" placeholder="https://vk.com/id… или https://t.me/username" required><button class="btn btn-primary btn-block" style="margin-top:14px" type="submit">'+icon('search')+' Найти и добавить фото</button></form>',{centered:true});
   const form=$('#clientPhotoSearchForm');
+  if(client.vk)form.querySelector('[name=provider]').value='vk';
+  else if(/(?:^|\\.)vk\\.(?:com|ru)\\//i.test(String(client.profileLink||'')))form.querySelector('[name=provider]').value='vk';
   form.onsubmit=async ev=>{
     ev.preventDefault();const raw=String(form.querySelector('[name=profile]').value||'').trim();let provider=form.querySelector('[name=provider]').value;
     if(!raw){toast('Вставь ссылку на профиль');return;}
-    if(provider==='auto'){if(/(?:t\.me|telegram\.me)/i.test(raw))provider='telegram';else if(/vk\.com/i.test(raw))provider='vk';else if(/instagram\.com/i.test(raw))provider='instagram';else if(raw.startsWith('@')||/^[a-z][a-z0-9_]{3,}$/i.test(raw))provider='telegram';else{toast('Не удалось определить соцсеть. Выбери её вручную.');return;}}
+    if(provider==='auto'){if(/(?:t\.me|telegram\.me)/i.test(raw))provider='telegram';else if(/vk\.(?:com|ru)/i.test(raw))provider='vk';else if(/instagram\.com/i.test(raw))provider='instagram';else if(raw.startsWith('@')||/^[a-z][a-z0-9_]{3,}$/i.test(raw))provider='telegram';else{toast('Не удалось определить соцсеть. Выбери её вручную.');return;}}
     const normalized=raw.replace(/^@/,'').trim();client[provider]=normalized;
     client.profileLink=/^https?:\/\//i.test(raw)?raw:(provider==='telegram'?'https://t.me/'+normalized:provider==='vk'?'https://vk.com/'+normalized:'https://instagram.com/'+normalized);
     const foundUrl=autoClientAvatarUrl(client);if(!foundUrl){toast('Не удалось распознать ссылку. Проверь адрес профиля.');return;}
@@ -2235,7 +2237,7 @@ function normalizeClientLink(value,provider){
   let raw=String(value||'').trim().toLowerCase();
   if(!raw) return '';
   raw=raw.replace(/[?#].*$/,'').replace(/\/$/,'');
-  const aliases={vk:['vk.com','m.vk.com'],instagram:['instagram.com'],telegram:['t.me','telegram.me'],max:['max.ru','web.max.ru']};
+  const aliases={vk:['vk.com','m.vk.com','vk.ru','m.vk.ru'],instagram:['instagram.com'],telegram:['t.me','telegram.me'],max:['max.ru','web.max.ru']};
   try{
     const hasScheme=/^https?:\/\//i.test(raw);
     const u=new URL(hasScheme?raw:'https://'+raw);
@@ -2277,7 +2279,7 @@ function autoClientAvatarUrl(c){
   if(/^https?:\/\//i.test(profile)){
     try{
       const host=new URL(profile).hostname.replace(/^www\./,'').toLowerCase();
-      const provider=host==='vk.com'||host==='m.vk.com'?'vk':host==='instagram.com'?'instagram':host==='t.me'||host==='telegram.me'?'telegram':'';
+      const provider=['vk.com','m.vk.com','vk.ru','m.vk.ru'].includes(host)?'vk':host==='instagram.com'?'instagram':host==='t.me'||host==='telegram.me'?'telegram':'';
       if(provider) sources.unshift([provider,profile]);
     }catch(_){}
   }
@@ -2290,7 +2292,7 @@ function autoClientAvatarUrl(c){
       if(/^https?:\/\//i.test(raw)){
         const u=new URL(raw);
         const host=u.hostname.replace(/^www\./,'').toLowerCase();
-        if(provider==='vk' && (host==='vk.com'||host==='m.vk.com')) username=u.pathname.split('/').filter(Boolean)[0]||'';
+        if(provider==='vk' && ['vk.com','m.vk.com','vk.ru','m.vk.ru'].includes(host)) username=u.pathname.split('/').filter(Boolean)[0]||'';
         else if(provider==='instagram' && host==='instagram.com') username=u.pathname.split('/').filter(Boolean)[0]||'';
         else if(provider==='telegram' && (host==='t.me'||host==='telegram.me')) username=u.pathname.split('/').filter(Boolean)[0]||'';
         else continue;
@@ -2690,6 +2692,7 @@ window.startTelegramLink = async function(id){
     if(body)body.innerHTML='<div class="cl-top"><span class="cl-ttl">Telegram не подключён</span><button class="cl-ib" onclick="closeModal()">✕</button></div><p class="small">Не удалось зарегистрировать ссылку. Причина: <b>'+esc(msg)+'</b></p><p class="small dim">Проверь интернет и нажми «Подключить Telegram» ещё раз.</p><button class="btn btn-primary" data-id="'+esc(String(id))+'" onclick="closeModal();window.startTelegramLink(this.dataset.id)">Повторить</button>';
   }
 };
+function hasClientVkLink(c){return !!(c&&String(c.vk||'').trim())||/(?:^|\/\/)(?:m\.)?vk\.(?:com|ru)\//i.test(String(c&&c.profileLink||''));}
 function openClient(id,tab){
   const c=S.clients.find(x=>x.id===id); if(!c) return;
   const events=S.events.filter(e=>e.clientId===id).sort((a,b)=>new Date(b.date)-new Date(a.date));
@@ -2705,7 +2708,7 @@ function openClient(id,tab){
     <button class="btn btn-primary" onclick="closeModal();go('calendar');openEventForm(null,{clientId:'${id}'})">${icon('plus')} Новая запись</button>
     <button class="btn" onclick="openMessageTemplates('${id}')">${icon('message')} Сообщение</button>
     <button class="btn" onclick="window.startVkLink('${id}')">Подключить VK</button>
-    <button class="btn" onclick="window.startTelegramLink('${id}')">Подключить Telegram</button>
+    ${!hasClientVkLink(c)?'<button class="btn" onclick="window.startTelegramLink(\''+id+'\')">Подключить Telegram</button>':''}
     <button class="btn" onclick="openClientPhotoSearch('${id}')">${icon('search')} Найти фото</button>
   </div>
   <div class="cl-tabs">
