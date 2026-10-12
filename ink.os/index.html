@@ -4132,7 +4132,7 @@ RENDERERS.finance=function(){
       <div class="finance-stat"><span>Доход за год</span><b>${f  ${financePeriod!=='all'?`<div class="fin-forecast" onclick="openForecastSheet()">
     <div><div class="fl">Предстоит заработать ${fcLabel}</div><div class="fv">+${finVal(fmtMoney(fcExpected))}</div><div class="small dim">${fcList.length?fcList.length+' '+financePlural(fcList.length,'запись','записи','записей')+' с остатком':'Нет будущих записей с остатком'}</div></div>
     <div class="tot"><div class="fl">Долги за проведённые сеансы</div><div class="fv">${finVal(fmtMoney(debtExpected))}</div><div class="small dim">${debtList.length?debtList.length+' '+financePlural(debtList.length,'сеанс','сеанса','сеансов')+' с остатком':'Нет долгов по проведённым сеансам'}</div></div>
-  </div>`:''})}</div></div>
+  </div>`:''}</div></div>
     <div class="fin-card exp">${icon('reports')}<div class="fl">Расходы за выбранный период</div><div class="fv">${finVal(fmtMoney(expense))}</div></div>
   </div>`:''}
   ${financePeriod!=='all'?`<div class="fin-forecast" onclick="openForecastSheet()">
