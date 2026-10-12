@@ -4128,7 +4128,7 @@ RENDERERS.finance=function(){
   $('#content').innerHTML=`
   <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
     <div><h2 style="margin:0">Финансы</h2><div class="small dim">Реальные операции и прогноз поступлений</div></div>
-    <button class="btn btn-primary btn-icon btn-sm" onclick="openFinanceForm()">${icon('plus')}</button>
+    <button class="btn btn-secondary btn-sm" onclick="openFinanceDiagnostics()">Проверить расчёт</button><button class="btn btn-primary btn-icon btn-sm" onclick="openFinanceForm()">${icon('plus')}</button>
   </div>
   <section class="finance-premium-summary finance-summary-compact">
     <div class="finance-summary-top">
@@ -4234,6 +4234,46 @@ function openFinChart(){
   const catSeries=Object.entries(byIncomeCat).map(([k,v])=>({label:(INCOME_CATEGORIES[k]||k).slice(0,6),value:v,color:'#20B2AA'}));
   const series=[{label:'Доход',value:income,color:'#2ecc71'},{label:'Расход',value:expense,color:'#c62b28'},...catSeries];
   setTimeout(()=>drawBarChart(canvas,series),20);
+}
+function openFinanceDiagnostics(){
+  const now=new Date();
+  const monthKey=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const yearKey=String(now.getFullYear());
+  const money=n=>fmtMoney(Number(n||0));
+  const dateOK=x=>typeof x==='string'&&/^\\d{4}-\\d{2}-\\d{2}$/.test(x);
+  const finance=Array.isArray(S.finance)?S.finance.filter(x=>x&&typeof x==='object'):[];
+  const payments=Array.isArray(S.payments)?S.payments.filter(x=>x&&typeof x==='object'):[];
+  const events=Array.isArray(S.events)?S.events.filter(x=>x&&typeof x==='object'):[];
+  const sum=(arr,fn)=>arr.filter(fn).reduce((a,x)=>a+Number(x.amount||0),0);
+  const finIncome=finance.filter(x=>x.type==='income');
+  const finExpense=finance.filter(x=>x.type==='expense');
+  const validFinIncome=finIncome.filter(x=>dateOK(x.date));
+  const validFinExpense=finExpense.filter(x=>dateOK(x.date));
+  const validPayments=payments.filter(x=>dateOK(x.date)&&Number(x.amount||0)>0&&x.status!=='Возвращено');
+  const allIncome=financeIncomeEntries();
+  const completed=events.filter(e=>e.status==='completed'&&['session','consult','correction','model'].includes(e.type)&&Number(e.cost||0)>0);
+  const rows=(arr,kind)=>arr.slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).map(x=>'<tr><td>'+esc(String(x.date||'БЕЗ ДАТЫ'))+'</td><td>'+esc(String(x.type||x.status||kind))+'</td><td>'+esc(money(x.amount??x.cost))+'</td><td>'+esc(String(x.eventId??'—'))+'</td></tr>').join('');
+  openSheet('Диагностика финансов',`
+    <p class="small dim">Только чтение: данные не изменяются и не создаются.</p>
+    <div class="table-wrap"><table>
+      <tr><th>Показатель</th><th>Записей</th><th>Сумма</th></tr>
+      <tr><td>Все операции дохода (finance)</td><td>${finIncome.length}</td><td>${money(sum(finIncome,()=>true))}</td></tr>
+      <tr><td>Доход finance с корректной датой</td><td>${validFinIncome.length}</td><td>${money(sum(validFinIncome,()=>true))}</td></tr>
+      <tr><td>Расходы (finance)</td><td>${finExpense.length}</td><td>${money(sum(finExpense,()=>true))}</td></tr>
+      <tr><td>Расходы с корректной датой</td><td>${validFinExpense.length}</td><td>${money(sum(validFinExpense,()=>true))}</td></tr>
+      <tr><td>Платежи, кроме возвратов</td><td>${validPayments.length}</td><td>${money(sum(validPayments,()=>true))}</td></tr>
+      <tr><td>Сводный доход после сопоставления</td><td>${allIncome.length}</td><td>${money(sum(allIncome,()=>true))}</td></tr>
+      <tr><td>Доход finance за ${monthKey}</td><td>${finIncome.filter(x=>String(x.date||'').startsWith(monthKey)).length}</td><td>${money(sum(finIncome,x=>String(x.date||'').startsWith(monthKey)))}</td></tr>
+      <tr><td>Расходы за ${monthKey}</td><td>${finExpense.filter(x=>String(x.date||'').startsWith(monthKey)).length}</td><td>${money(sum(finExpense,x=>String(x.date||'').startsWith(monthKey)))}</td></tr>
+      <tr><td>Доход за ${yearKey}</td><td>${allIncome.filter(x=>String(x.date||'').startsWith(yearKey)).length}</td><td>${money(sum(allIncome,x=>String(x.date||'').startsWith(yearKey)))}</td></tr>
+      <tr><td>Завершённые сеансы с ценой</td><td>${completed.length}</td><td>${money(completed.reduce((a,e)=>a+Number(e.cost||0),0))}</td></tr>
+      <tr><td>Без корректной даты: доход / расход / платёж</td><td>${finIncome.filter(x=>!dateOK(x.date)).length} / ${finExpense.filter(x=>!dateOK(x.date)).length} / ${payments.filter(x=>!dateOK(x.date)).length}</td><td>—</td></tr>
+    </table></div>
+    <h4>Операции дохода и расхода</h4>
+    <div class="table-wrap"><table><tr><th>Дата</th><th>Тип</th><th>Сумма</th><th>ID записи</th></tr>${rows(finance,'finance')||'<tr><td colspan="4">Нет операций</td></tr>'}</table></div>
+    <h4>Платежи клиентов</h4>
+    <div class="table-wrap"><table><tr><th>Дата</th><th>Статус</th><th>Сумма</th><th>ID записи</th></tr>${rows(payments,'payment')||'<tr><td colspan="4">Нет платежей</td></tr>'}</table></div>
+  `);
 }
 function financeScope(f){
   if(!f || typeof f!=='object') return false;
