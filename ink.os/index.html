@@ -4026,11 +4026,18 @@ function trendHtml(pct){
   return `<span class="trend ${up?'up':'down'}">${up?'↗':'↘'} ${up?'+':''}${pct}%</span>`;
 }
 function financeIncomeEntries(){
-  const payments=Array.isArray(S.payments)?S.payments.filter(p=>p&&typeof p==='object'&&Number(p.amount||0)>0&&p.status!=='Возвращено'):[];
-  const paidEventIds=new Set(payments.map(p=>p.eventId).filter(Boolean));
-  const paymentEntries=payments.map(p=>({type:'income',date:p.date,amount:Number(p.amount||0),eventId:p.eventId,source:'payment'}));
-  const extraEntries=(Array.isArray(S.finance)?S.finance:[]).filter(f=>f&&f.type==='income'&&!(f.eventId&&paidEventIds.has(f.eventId))).map(f=>({...f,source:'finance'}));
-  return paymentEntries.concat(extraEntries).filter(f=>typeof f.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(f.date));
+  const allPayments=Array.isArray(S.payments)?S.payments.filter(p=>p&&typeof p==='object'&&Number(p.amount||0)>0):[];
+  // Match linked finance entries to payments using normalized IDs, including refunded payments,
+  // so the original income row cannot reappear when a payment is marked as refunded.
+  const linkedEventIds=new Set(allPayments.map(p=>p.eventId==null?'':String(p.eventId)).filter(Boolean));
+  const paymentEntries=allPayments
+    .filter(p=>p.status!=='Возвращено')
+    .map(p=>({type:'income',date:p.date,amount:Number(p.amount||0),eventId:p.eventId,source:'payment'}));
+  const extraEntries=(Array.isArray(S.finance)?S.finance:[])
+    .filter(f=>f&&f.type==='income'&&!(f.eventId!=null&&linkedEventIds.has(String(f.eventId))))
+    .map(f=>({...f,source:'finance'}));
+  return paymentEntries.concat(extraEntries)
+    .filter(f=>typeof f.date==='string'&&/^\\d{4}-\\d{2}-\\d{2}$/.test(f.date));
 }
 function buildIncomeSeries(startISO,endISO,granularity){
   const points=[]; let cur=new Date(startISO); const end=new Date(endISO);
