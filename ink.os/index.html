@@ -4077,7 +4077,8 @@ RENDERERS.finance=function(){
   const taxRate=Math.max(0,Math.min(100,Number(S.settings.taxRate||0)));
   const monthRemaining=monthlyGoal?Math.max(0,monthlyGoal-monthIncome):0;
   const monthProgress=monthlyGoal?Math.min(100,Math.round(monthIncome/monthlyGoal*100)):0;
-  const completedMonthEvents=S.events.filter(e=>e.status==='completed'&&(e.date||'').startsWith(monthKey)&&Number(e.cost||0)>0);
+  const billableFinanceTypes=['session','consult','correction','model'];
+  const completedMonthEvents=S.events.filter(e=>e.status==='completed'&&(e.date||'').startsWith(monthKey)&&billableFinanceTypes.includes(e.type)&&Number(e.cost||0)>0);
   const monthAvgCheck=completedMonthEvents.length?Math.round(completedMonthEvents.reduce((a,e)=>a+Number(e.cost||0),0)/completedMonthEvents.length):0;
   const monthTax=monthIncome*taxRate/100;
   const monthNet=monthIncome-monthExpense-monthTax;
@@ -4089,7 +4090,8 @@ RENDERERS.finance=function(){
   const prevEvts=S.events.filter(e=>e.date>=prevRange.start&&e.date<=prevRange.end);
   const recordsCount=periodEvts.length;
   const prevRecordsCount=prevEvts.length;
-  const avgCheck=recordsCount? income/recordsCount : 0;
+  const pricedCompletedPeriodEvents=periodEvts.filter(e=>e.status==='completed'&&billableFinanceTypes.includes(e.type)&&Number(e.cost||0)>0);
+  const avgCheck=pricedCompletedPeriodEvents.length?Math.round(pricedCompletedPeriodEvents.reduce((sum,e)=>sum+Number(e.cost||0),0)/pricedCompletedPeriodEvents.length):0;
 
   const newClients=S.clients.filter(c=>c.firstVisit && c.firstVisit>=start && c.firstVisit<=end).length;
   const prevNewClients=S.clients.filter(c=>c.firstVisit && c.firstVisit>=prevRange.start && c.firstVisit<=prevRange.end).length;
