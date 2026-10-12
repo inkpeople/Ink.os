@@ -2299,6 +2299,9 @@ function autoClientAvatarUrl(c){
       }else username=raw.replace(/^@/,'').replace(/^https?:\/\/(?:www\.)?(?:vk\.com|instagram\.com|t\.me)\//i,'').split(/[/?#]/)[0];
     }catch(_){ continue; }
     username=String(username||'').replace(/^@/,'').trim();
+    // VK принимает как id23757760, так и чистый числовой ID: 23757760.
+    // Нормализуем оба варианта к одному формату перед запросом аватара.
+    if(provider==='vk' && /^\d+$/.test(username)) username='id'+username;
     if(username && /^[a-z0-9._-]+$/i.test(username) && !(provider!=='vk' && /^id\d+$/i.test(username)) && !/^(club\d+|public\d+|photo\d+_\d+)$/i.test(username)){
       return 'https://unavatar.io/'+provider+'/'+encodeURIComponent(username);
     }
