@@ -2196,6 +2196,8 @@ function openContactFillSheet(clientId,key,label){
   };
 }
 function renderClientsList(){
+  // Автоматически ищем аватар для существующих карточек без фото, если указан профиль соцсети.
+  S.clients.forEach(c=>{if(c&&!c.avatar&&(c.telegram||c.vk||c.instagram||c.profileLink))autoImportClientAvatar(c);});
   let list=S.clients.slice();
   const q=clientFilter.q.trim().toLowerCase();
   if(q) list=list.filter(c=>[c.name,c.phone,c.instagram,c.city,c.whatsapp,c.telegram].filter(Boolean).join(' ').toLowerCase().includes(q));
@@ -2311,12 +2313,19 @@ async function downloadClientAvatar(c){
   }catch(err){console.warn('Automatic profile photo import unavailable:',err);return false;}
 }
 function autoImportClientAvatar(c){
-  if(!c||c.avatar)return;
+  if(!c||c.avatar||!c.id)return;
   const url=autoClientAvatarUrl(c);
   if(!url)return;
+  // Сразу сохраняем ссылку на аватар, чтобы фото появилось даже если браузер запрещает скачать файл напрямую.
   c.avatar=url;
+  idbPut('clients',c).then(()=>{
+    const idx=S.clients.findIndex(x=>x.id===c.id);
+    if(idx>=0)S.clients[idx]=c;
+    if(currentRoute==='clients')renderClientsList();
+  }).catch(err=>console.warn('Avatar URL save failed:',err));
+  // При доступном CORS сохраняем изображение локально в карточке клиента.
   downloadClientAvatar(c).then(ok=>{
-    if(!ok){const idx=S.clients.findIndex(x=>x.id===c.id);if(idx>=0){S.clients[idx].avatar=url;}}
+    if(ok&&document.getElementById('clientTabBody'))openClient(c.id,'info');
   });
 }
 function openClientForm(existing){
