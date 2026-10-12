@@ -2183,9 +2183,13 @@ function openContactFillSheet(clientId,key,label){
     const client=S.clients.find(c=>c.id===clientId);
     if(!client){ closeSheet(); return; }
     client[key]=val;
+    const shouldAutoAvatar=!client.avatar;
+    if(shouldAutoAvatar){const avatarUrl=autoClientAvatarUrl(client);if(avatarUrl)client.avatar=avatarUrl;}
     await idbPut('clients',client);
+    const ci=S.clients.findIndex(x=>x.id===client.id);if(ci>=0)S.clients[ci]=client;
     closeSheet();
     toast('Контакт сохранён');
+    if(shouldAutoAvatar&&client.avatar&&!String(client.avatar).startsWith('data:image/'))downloadClientAvatar(client).then(ok=>{if(ok&&document.getElementById('clientTabBody'))openClient(clientId,'info');});
     if(typeof window._refreshEvtContacts==='function') window._refreshEvtContacts();
     if(document.getElementById('clientTabBody')) openClient(clientId,'info');
     if(currentRoute==='clients') renderClientsList();
@@ -2280,6 +2284,40 @@ function autoClientAvatarUrl(c){
     }
   }
   return '';
+}
+async function downloadClientAvatar(c){
+  if(!c||!c.id||!c.avatar||String(c.avatar).startsWith('data:image/'))return false;
+  const source=String(c.avatar);
+  if(!/^https?:\/\//i.test(source))return false;
+  try{
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),9000);
+    let response;
+    try{response=await fetch(source,{mode:'cors',credentials:'omit',signal:controller.signal,cache:'no-store'});}
+    finally{clearTimeout(timer);}
+    if(!response||!response.ok)return false;
+    const blob=await response.blob();
+    if(!blob.type.startsWith('image/'))return false;
+    const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('read'));reader.readAsDataURL(blob);});
+    const img=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('image'));im.src=dataUrl;});
+    const size=420,canvas=document.createElement('canvas');canvas.width=canvas.height=size;
+    const side=Math.min(img.naturalWidth||img.width,img.naturalHeight||img.height);
+    canvas.getContext('2d').drawImage(img,((img.naturalWidth||img.width)-side)/2,((img.naturalHeight||img.height)-side)/2,side,side,0,0,size,size);
+    c.avatar=canvas.toDataURL('image/jpeg',0.82);
+    await idbPut('clients',c);
+    const idx=S.clients.findIndex(x=>x.id===c.id);if(idx>=0)S.clients[idx]=c;
+    if(currentRoute==='clients')renderClientsList();
+    return true;
+  }catch(err){console.warn('Automatic profile photo import unavailable:',err);return false;}
+}
+function autoImportClientAvatar(c){
+  if(!c||c.avatar)return;
+  const url=autoClientAvatarUrl(c);
+  if(!url)return;
+  c.avatar=url;
+  downloadClientAvatar(c).then(ok=>{
+    if(!ok){const idx=S.clients.findIndex(x=>x.id===c.id);if(idx>=0){S.clients[idx].avatar=url;}}
+  });
 }
 function openClientForm(existing){
   const c=existing||{id:null,name:'',phone:'',instagram:'',whatsapp:'',telegram:'',vk:'',max:'',profileLink:'',city:'',country:'',cameFrom:'',firstVisit:todayISO(),lastVisit:'',visits:0,totalSum:0,source:'',styles:'',zones:'',status:'Новый',nextContact:'',quickNotes:[],birthDate:'',allergies:'',comment:''};
@@ -2476,7 +2514,8 @@ function openClientForm(existing){
     const oldStatus=c.status, oldComment=c.comment;
     const obj={...c};
     fd.forEach((v,k)=>obj[k]=v);
-    if(!obj.avatar){ const avatarUrl=autoClientAvatarUrl(obj); if(avatarUrl) obj.avatar=avatarUrl; }
+    const needsProfileAvatar=!obj.avatar;
+    if(needsProfileAvatar){ const avatarUrl=autoClientAvatarUrl(obj); if(avatarUrl) obj.avatar=avatarUrl; }
     obj.reminderConsent=!!$('#clientReminderConsent')?.checked;
     obj.reminderChannel=String(obj.reminderChannel||'telegram').toLowerCase()==='vk'?'vk':'telegram';
     obj.telegramChatId=String(obj.telegramChatId||'').trim();
@@ -2493,6 +2532,9 @@ function openClientForm(existing){
     }
     closeModal();
     toast('Клиент сохранён');
+    if(needsProfileAvatar&&obj.avatar&&!String(obj.avatar).startsWith('data:image/')){
+      downloadClientAvatar(obj).then(ok=>{if(ok){toast('Фото профиля автоматически добавлено в карточку');if(document.getElementById('clientTabBody'))openClient(obj.id,'info');}});
+    }
     if(currentRoute==='clients') go('clients');
     const vkToken=String(obj.vkLinkToken||'').trim();
     if(vkToken){
