@@ -4045,7 +4045,7 @@ function buildIncomeSeries(startISO,endISO,granularity){
     else bucketEndDate=new Date(cur.getFullYear(),cur.getMonth()+1,0);
     const bStart=cur.toISOString().slice(0,10);
     const bEnd=(bucketEndDate>end?end:bucketEndDate).toISOString().slice(0,10);
-    const val=financeIncomeEntries().filter(f=>f.date>=bStart&&f.date<=bEnd).reduce((s,f)=>s+Number(f.amount||0),0);
+    const val=(Array.isArray(S.finance)?S.finance:[]).filter(f=>f.type==='income'&&f.date>=bStart&&f.date<=bEnd).reduce((s,f)=>s+Number(f.amount||0),0);
     const label=granularity==='month'? cur.toLocaleDateString('ru-RU',{month:'short'}) : String(cur.getDate());
     points.push({label,value:val});
     if(granularity==='day') cur.setDate(cur.getDate()+1);
@@ -4063,7 +4063,7 @@ RENDERERS.finance=function(){
   S.payments=Array.isArray(S.payments)?S.payments.filter(p=>p&&typeof p==='object'):[];
   S.settings=S.settings&&typeof S.settings==='object'?S.settings:defaultSettings();
   const items=S.finance.filter(f=>financeScope(f));
-  const incomeEntries=financeIncomeEntries();
+  const incomeEntries=S.finance.filter(f=>f.type==='income');
   const income=incomeEntries.filter(f=>financeScope(f)).reduce((s,f)=>s+Number(f.amount||0),0);
   const expense=items.filter(f=>f.type==='expense').reduce((s,f)=>s+Number(f.amount||0),0);
   const now=new Date();
