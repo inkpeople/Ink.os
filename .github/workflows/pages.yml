@@ -29,7 +29,7 @@ jobs:
           const vm = require('vm');
           const html = fs.readFileSync('ink.os/index.html', 'utf8');
           const scripts = [];
-          const parts = html.split(/<script\\b/i).slice(1);
+          const parts = html.split('<script').slice(1);
           for (const part of parts) {
             const close = part.indexOf('</script>');
             if (close < 0) continue;
