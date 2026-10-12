@@ -3373,7 +3373,7 @@ const MON=['янв','фев','мар','апр','май','июн','июл','ав�
 let anMonths=6;
 function incomeOf(f){ return f.type==='income'; }
 RENDERERS.analytics=function(){
-  const now=new Date(), ym=now.toISOString().slice(0,7), rate=Number(S.settings.taxRate||0), goal=Number(S.settings.monthGoal||0);
+  const now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'), rate=Number(S.settings.taxRate||0), goal=Number(S.settings.monthGoal||0);
   const fin=S.finance||[]; const sum=(arr)=>arr.reduce((a,f)=>a+Number(f.amount||0),0);
   const yearKey=String(now.getFullYear());
   const mInc=sum(fin.filter(f=>f.type==='income'&&(f.date||'').startsWith(ym))), mExp=sum(fin.filter(f=>f.type==='expense'&&(f.date||'').startsWith(ym)));
@@ -4014,7 +4014,7 @@ function periodRangeISO(period,offset){
   else if(period==='quarter'){ const qAbs=Math.floor(now.getMonth()/3)+offset; const y=now.getFullYear()+Math.floor(qAbs/4); const qq=((qAbs%4)+4)%4; start=new Date(y,qq*3,1); end=new Date(y,qq*3+3,0); }
   else if(period==='year'){ start=new Date(now.getFullYear()+offset,0,1); end=new Date(now.getFullYear()+offset,11,31); }
   else { start=new Date(2000,0,1); end=new Date(now); }
-  return {start:start.toISOString().slice(0,10),end:end.toISOString().slice(0,10)};
+  return {start:dateToLocalISO(start),end:dateToLocalISO(end)};
 }function pctChange(cur,prev){
   if(!prev) return cur>0?100:0;
   return Math.round((cur-prev)/prev*100);
@@ -4025,7 +4025,9 @@ function trendHtml(pct){
   return `<span class="trend ${up?'up':'down'}">${up?'↗':'↘'} ${up?'+':''}${pct}%</span>`;
 }
 function buildIncomeSeries(startISO,endISO,granularity){
-  const points=[]; let cur=new Date(startISO); const end=new Date(endISO);
+  // ISO date-only strings must be parsed as local calendar dates, not UTC timestamps.
+  const parseLocalISO=s=>{const [y,m,d]=String(s).split('-').map(Number);return new Date(y,m-1,d);};
+  const points=[]; let cur=parseLocalISO(startISO); const end=parseLocalISO(endISO);
   let guard=0;
   while(cur<=end && guard<400){
     guard++;
@@ -4033,8 +4035,8 @@ function buildIncomeSeries(startISO,endISO,granularity){
     if(granularity==='day') bucketEndDate=new Date(cur);
     else if(granularity==='week'){ bucketEndDate=new Date(cur); bucketEndDate.setDate(bucketEndDate.getDate()+6); }
     else bucketEndDate=new Date(cur.getFullYear(),cur.getMonth()+1,0);
-    const bStart=cur.toISOString().slice(0,10);
-    const bEnd=(bucketEndDate>end?end:bucketEndDate).toISOString().slice(0,10);
+    const bStart=dateToLocalISO(cur);
+    const bEnd=dateToLocalISO(bucketEndDate>end?end:bucketEndDate);
     const val=S.finance.filter(f=>f.type==='income'&&f.date>=bStart&&f.date<=bEnd).reduce((s,f)=>s+Number(f.amount||0),0);
     const label=granularity==='month'? cur.toLocaleDateString('ru-RU',{month:'short'}) : String(cur.getDate());
     points.push({label,value:val});
