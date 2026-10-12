@@ -4108,10 +4108,17 @@ RENDERERS.finance=function(){
     <button class="btn btn-primary btn-icon btn-sm" onclick="openFinanceForm()">${icon('plus')}</button>
   </div>
   <section class="finance-premium-summary finance-summary-compact">
-    <div class="finance-summary-top"><div><div class="finance-eyebrow">ФИНАНСЫ · ${MON[now.getMonth()]} ${now.getFullYear()}</div><div class="finance-summary-caption">Ключевые показатели студии</div></div><div class="finance-summary-mark">₽</div></div>
+    <div class="finance-summary-top">
+      <div>
+        <div class="finance-eyebrow">ФИНАНСЫ · ${MON[now.getMonth()]} ${now.getFullYear()}</div>
+        <div class="finance-summary-total">${finVal(fmtMoney(monthIncome))}</div>
+        <div class="finance-summary-caption">Доход за текущий месяц</div>
+      </div>
+      <div class="finance-summary-mark">₽</div>
+    </div>
     <div class="finance-summary-grid">
-      <div class="finance-stat"><span>Доход за месяц</span><b>${finVal(fmtMoney(monthIncome))}</b></div>
       <div class="finance-stat"><span>Расход за месяц</span><b>${finVal(fmtMoney(monthExpense))}</b></div>
+      <div class="finance-stat"><span>Прибыль за месяц</span><b>${finVal(fmtMoney(monthIncome-monthExpense))}</b></div>
       <div class="finance-stat"><span>Доход за год</span><b>${finVal(fmtMoney(yearIncome))}</b><small>${now.getFullYear()} год</small></div>
       <div class="finance-stat"><span>Средний чек за месяц</span><b>${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small>${completedMonthEvents.length?completedMonthEvents.length+' завершённых сеансов':'Нет завершённых сеансов с ценой'}</small></div>
     </div>
