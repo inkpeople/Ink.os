@@ -2197,20 +2197,57 @@ function openContactFillSheet(clientId,key,label){
 }
 function openClientPhotoSearch(clientId){
   const client=S.clients.find(c=>c.id===clientId);if(!client)return;
-  openSheet('Поиск фотографии клиента', '<form id="clientPhotoSearchForm"><div class="dim small" style="margin-bottom:10px">Укажи соцсеть и ссылку на профиль. Приложение определит источник и попробует найти публичный аватар.</div><label>Где искать фото</label><select name="provider" class="input"><option value="auto">Определить автоматически по ссылке</option><option value="telegram">Telegram</option><option value="vk">ВКонтакте</option><option value="instagram">Instagram</option></select><label style="margin-top:10px">Ссылка на профиль или @username</label><input name="profile" value="'+esc(client.vk||client.profileLink||client.telegram||client.instagram||'')+'" placeholder="https://vk.com/id… или https://t.me/username" required><button class="btn btn-primary btn-block" style="margin-top:14px" type="submit">'+icon('search')+' Найти и добавить фото</button></form>',{centered:true});
-  const form=$('#clientPhotoSearchForm');
-  if(client.vk)form.querySelector('[name=provider]').value='vk';
-  else if(/(?:^|\/\/)(?:m\.)?vk\.(?:com|ru)\//i.test(String(client.profileLink||'')))form.querySelector('[name=provider]').value='vk';
+  openSheet('Поиск фотографии клиента', '<form id="clientPhotoSearchForm"><div class="dim small" style="margin-bottom:10px">Вставь ссылку на профиль VK или числовой ID. Для VK используется серверный поиск публичного аватара.</div><label>Где искать фото</label><select name="provider" class="input"><option value="auto">Определить автоматически по ссылке</option><option value="vk">ВКонтакте</option><option value="telegram">Telegram</option><option value="instagram">Instagram</option></select><label style="margin-top:10px">Ссылка на профиль или ID</label><input name="profile" value="'+esc(client.vk||client.profileLink||client.telegram||client.instagram||'')+'" placeholder="https://vk.ru/id23757760 или 23757760" required><div id="clientPhotoSearchStatus" class="dim small" style="margin-top:8px"></div><button class="btn btn-primary btn-block" style="margin-top:14px" type="submit">'+icon('search')+' Найти и добавить фото</button></form>',{centered:true});
+  const form=$('#clientPhotoSearchForm');if(!form)return;
+  const providerSelect=form.querySelector('[name="provider"]');
+  if(client.vk||/(?:^|\/\/)(?:m\.)?vk\.(?:com|ru)\//i.test(String(client.profileLink||'')))providerSelect.value='vk';
   form.onsubmit=async ev=>{
-    ev.preventDefault();const raw=String(form.querySelector('[name=profile]').value||'').trim();let provider=form.querySelector('[name=provider]').value;
-    if(!raw){toast('Вставь ссылку на профиль');return;}
-    if(provider==='auto'){if(/(?:t\.me|telegram\.me)/i.test(raw))provider='telegram';else if(/vk\.(?:com|ru)/i.test(raw))provider='vk';else if(/instagram\.com/i.test(raw))provider='instagram';else if(raw.startsWith('@')||/^[a-z][a-z0-9_]{3,}$/i.test(raw))provider='telegram';else{toast('Не удалось определить соцсеть. Выбери её вручную.');return;}}
-    const normalized=raw.replace(/^@/,'').trim();client[provider]=normalized;
-    client.profileLink=/^https?:\/\//i.test(raw)?raw:(provider==='telegram'?'https://t.me/'+normalized:provider==='vk'?'https://vk.com/'+normalized:'https://instagram.com/'+normalized);
-    const foundUrl=autoClientAvatarUrl(client);if(!foundUrl){toast('Не удалось распознать ссылку. Проверь адрес профиля.');return;}
-    client.avatar=foundUrl;await idbPut('clients',client);const idx=S.clients.findIndex(c=>c.id===client.id);if(idx>=0)S.clients[idx]=client;
-    closeSheet();openClient(clientId,'info');toast('Источник определён. Ищу публичную фотографию…');
-    const ok=await downloadClientAvatar(client);if(ok){toast('Фото найдено и сохранено в карточке');openClient(clientId,'info');}else toast('Ссылка сохранена. Если фото не появилось, профиль может быть закрыт или соцсеть блокирует загрузку.');
+    ev.preventDefault();
+    const raw=String(form.querySelector('[name="profile"]').value||'').trim();
+    let provider=providerSelect.value;
+    const status=form.querySelector('#clientPhotoSearchStatus');
+    const submit=form.querySelector('button[type="submit"]');
+    if(!raw){toast('Вставь ссылку на профиль или ID');return;}
+    if(provider==='auto'){
+      if(/(?:vk\.(?:com|ru)|^id?\d+$)/i.test(raw))provider='vk';
+      else if(/(?:t\.me|telegram\.me)/i.test(raw))provider='telegram';
+      else if(/instagram\.com/i.test(raw))provider='instagram';
+      else if(raw.startsWith('@')||/^[a-z][a-z0-9_]{3,}$/i.test(raw))provider='telegram';
+      else{toast('Не удалось определить соцсеть. Выбери ВКонтакте вручную.');return;}
+    }
+    let normalized=raw.replace(/^@/,'').trim();
+    if(provider==='vk'){
+      const numeric=normalized.match(/(?:vk\.(?:com|ru)\/(?:id)?|^id?)(\d+)/i);
+      if(numeric)normalized='id'+numeric[1];
+      else if(/^\d+$/.test(normalized))normalized='id'+normalized;
+      else if(/^https?:\/\//i.test(normalized)){
+        try{const u=new URL(normalized);if(!['vk.com','m.vk.com','vk.ru','m.vk.ru','www.vk.com','www.vk.ru'].includes(u.hostname.toLowerCase())){toast('Укажи ссылку именно на профиль VK');return;}normalized=u.pathname.split('/').filter(Boolean)[0]||'';}catch(_){toast('Проверь ссылку VK');return;}
+      }
+      if(!/^(id\d+|[a-z0-9_.-]+)$/i.test(normalized)){toast('Не удалось распознать ID или имя пользователя VK');return;}
+      client.vk=normalized;
+      client.profileLink=/^https?:\/\//i.test(raw)?raw:'https://vk.ru/'+normalized;
+    }else{
+      client[provider]=normalized;
+      client.profileLink=/^https?:\/\//i.test(raw)?raw:(provider==='telegram'?'https://t.me/'+normalized:'https://instagram.com/'+normalized);
+    }
+    const foundUrl=autoClientAvatarUrl(client);
+    if(!foundUrl){toast('Не удалось распознать ссылку. Проверь адрес профиля.');return;}
+    client.avatar=foundUrl;
+    await idbPut('clients',client);const idx=S.clients.findIndex(c=>c.id===client.id);if(idx>=0)S.clients[idx]=client;
+    if(submit)submit.disabled=true;
+    if(status)status.textContent='Ищу публичную фотографию…';
+    try{
+      const ok=await downloadClientAvatar(client);
+      if(ok){closeSheet();openClient(clientId,'info');toast('Фото найдено и сохранено в карточке');}
+      else{
+        if(status)status.textContent='Фото не удалось загрузить. Возможно, профиль закрыт или VK не отдаёт публичный аватар. Проверь ссылку и попробуй ещё раз.';
+        toast('VK не вернул доступную фотографию. Проверь ссылку или доступность профиля.');
+      }
+    }catch(err){
+      console.warn('Client photo search failed:',err);
+      if(status)status.textContent='Ошибка загрузки фотографии. Попробуй ещё раз.';
+      toast('Не удалось загрузить фото');
+    }finally{if(submit)submit.disabled=false;}
   };
 }
 function renderClientsList(){
