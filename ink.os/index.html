@@ -4118,7 +4118,7 @@ RENDERERS.finance=function(){
     </div>
     <div class="finance-summary-grid">
       <div class="finance-stat"><span>Рабочие расходы</span><b>${finVal(fmtMoney(monthExpense))}</b><small>За текущий месяц</small></div>
-      <div class="finance-stat"><span>Остаток после расходов и налога</span><b>${finVal(fmtMoney(monthNet))}</b><small>Налог по ставке ${taxRate}%</small></div>
+      <div class="finance-stat finance-stat-net"><span>Остаток после расходов и налога</span><b>${finVal(fmtMoney(monthNet))}</b><small>Налог рассчитан по ставке ${taxRate}%</small></div>
       <div class="finance-stat"><span>Заработано за год</span><b>${finVal(fmtMoney(yearIncome))}</b><small>${now.getFullYear()} год</small></div>
       <div class="finance-stat"><span>Расходы за год</span><b>${finVal(fmtMoney(yearExpense))}</b><small>${now.getFullYear()} год</small></div>
       <div class="finance-stat"><span>Средний чек</span><b>${monthAvgCheck?finVal(fmtMoney(monthAvgCheck)):'—'}</b><small>${completedMonthEvents.length?completedMonthEvents.length+' завершённых сеансов с ценой':'Нет завершённых сеансов с ценой'}</small></div>
@@ -6552,6 +6552,7 @@ tr:hover{background:rgba(180,154,106,.045)}
 .finance-stat{min-width:0;padding:11px;border:1px solid rgba(198,163,98,.18);border-radius:13px;background:rgba(255,255,255,.025)}
 .finance-stat span,.finance-stat small{display:block;color:var(--muted,#a6a097);font-size:10px;line-height:1.45}
 .finance-stat b{display:block;margin-top:6px;font-size:clamp(13px,3.5vw,17px);line-height:1.25;color:#f1e7d2;overflow-wrap:anywhere}
+.finance-stat-net{border-color:rgba(115,177,133,.32);background:linear-gradient(135deg,rgba(62,116,77,.12),rgba(255,255,255,.025))}.finance-stat-net b{color:#b8e2c1}.finance-summary-foot{font-variant-numeric:tabular-nums}.finance-summary-foot span{line-height:1.5}
 .finance-stat small{margin-top:4px;font-size:9px}
 .finance-goal-row{margin-top:14px}
 .finance-goal-row>div:first-child{display:flex;justify-content:space-between;gap:8px;margin-bottom:7px;font-size:11px;color:#c8c0b4}
