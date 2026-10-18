@@ -1,0 +1,15 @@
+{
+  "name": "INK.OS Studio — CRM тату-мастера",
+  "short_name": "INK.OS Studio",
+  "description": "Календарь, клиенты, финансы, проекты, ученики и склад тату-мастера.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101111",
+  "theme_color": "#101111",
+  "icons": [
+    { "src": "../icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
