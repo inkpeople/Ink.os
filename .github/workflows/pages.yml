@@ -27,26 +27,27 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
-          const html = fs.readFileSync('ink.os/index.html', 'utf8');
-          const scripts = [];
-          const parts = html.split('<script').slice(1);
-          for (const part of parts) {
-            const close = part.indexOf('</script>');
-            if (close < 0) continue;
-            const open = part.indexOf('>');
-            if (open < 0 || open > close) continue;
-            const source = part.slice(open + 1, close);
-            if (source.trim()) scripts.push(source);
-          }
-          scripts.forEach((source, index) => {
-            try {
-              new vm.Script(source, { filename: `inline-script-${index + 1}.js` });
-            } catch (error) {
-              console.error(error.stack);
-              process.exitCode = 1;
+          let count = 0;
+          for (const file of ['ink.os/index.html', 'studio/index.html']) {
+            const html = fs.readFileSync(file, 'utf8');
+            const parts = html.split('<script').slice(1);
+            for (const part of parts) {
+              const close = part.indexOf('</script>');
+              if (close < 0) continue;
+              const open = part.indexOf('>');
+              if (open < 0 || open > close) continue;
+              const source = part.slice(open + 1, close);
+              if (!source.trim()) continue;
+              count++;
+              try {
+                new vm.Script(source, { filename: file + ':inline-script-' + count });
+              } catch (error) {
+                console.error(error.stack);
+                process.exitCode = 1;
+              }
             }
-          });
-          if (!process.exitCode) console.log(`Validated ${scripts.length} inline script(s).`);
+          }
+          if (!process.exitCode) console.log('Validated ' + count + ' inline script(s).');
           NODE
 
       - name: Setup Pages
