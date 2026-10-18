@@ -78,6 +78,7 @@ function saveConsent(ev){ev.preventDefault();const f=new FormData(ev.target),id=
 
 async function initAuth(){
  const overlay=document.getElementById("authOverlay");
+ document.getElementById("offlineMode").onclick=()=>{overlay.classList.add("hidden");cloudReady=false;toast("Офлайн-режим: данные хранятся только в этом браузере")};
  if(!window.supabase||!window.supabase.createClient){document.getElementById("authMessage").textContent="Не загрузился сервис аккаунтов. Проверь интернет или выбери офлайн-режим.";return}
  sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);document.getElementById("accountButton").onclick=signOut;
  document.getElementById("authForm").onsubmit=async ev=>{ev.preventDefault();if(authBusy)return;authBusy=true;const f=new FormData(ev.target),email=String(f.get("email")||"").trim(),password=String(f.get("password")||""),msg=document.getElementById("authMessage");msg.textContent="Подключаем аккаунт…";try{const res=authMode==="login"?await sb.auth.signInWithPassword({email,password}):await sb.auth.signUp({email,password});if(res.error)throw res.error;if(authMode==="register"&&!res.data.session){msg.textContent="Аккаунт создан. Подтверди email и затем войди.";return}if(res.data.session)await enterAccount(res.data.session.user)}catch(e){msg.textContent=e.message||"Ошибка авторизации"}finally{authBusy=false}};
