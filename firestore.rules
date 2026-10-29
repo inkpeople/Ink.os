@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Every master's data lives beneath their own Firebase Auth UID.
+    // Example: users/{uid}/records/{recordId}
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+
+    // No public client data, unauthenticated access, or cross-account access.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
