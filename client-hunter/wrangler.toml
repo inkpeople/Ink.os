@@ -5,4 +5,4 @@ compatibility_date = "2026-10-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "ramzes-client-hunter"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "db9d6980-5171-485e-9a7b-f3da5fc63176"
