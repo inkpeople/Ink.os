@@ -99,7 +99,7 @@ async function command(env, chatId, text) {
     const rows = (await listLeads(env)).results;
     if (!rows.length) return send(env, chatId, "Новых совпадений пока нет. Запусти /scan.");
     for (const l of rows) {
-      await send(env, chatId, `<b>${esc(l.source.toUpperCase())} · ${l.score}/100</b>\n${esc(l.text)}\n<a href="${esc(l.url)}">Открыть публикацию</a>\nID: <code>${l.id}</code>\n/done ${l.id} · /ignore ${l.id>`);
+      await send(env, chatId, `<b>${esc(l.source.toUpperCase())} · ${l.score}/100</b>\n${esc(l.text)}\n<a href="${esc(l.url)}">Открыть публикацию</a>\nID: <code>${l.id}</code>\n/done ${l.id} · /ignore ${l.id}`);
     }
     return;
   }
